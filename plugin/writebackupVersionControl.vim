@@ -62,6 +62,11 @@
 "
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 " REVISION	DATE		REMARKS 
+"   1.20.009	30-Dec-2007	:WriteBackupListVersions and
+"				:WriteBackupDiffWithPred claimed "no backups
+"				exist" if option 'wildignore' hides the backup
+"				files. Now temporarily resetting the option
+"				before glob(). 
 "   1.20.008	18-Sep-2007	ENH: Added support for writing backup files into
 "				a different directory (either one static backup
 "				dir or relative to the original file). 
@@ -270,15 +275,31 @@ function! s:GetAllBackupsForFile( adjustedBackupFilespec )
 "* RETURN VALUES: 
 "   sorted list of backup filespecs
 "*******************************************************************************
-    " glob() will do the right thing and return an empty list if
-    " a:adjustedBackupFilespec doesn't yet exist, because no backup has yet been
-    " made. 
-    let l:backupfiles = split( glob( a:adjustedBackupFilespec . s:versionFileGlob ), "\n" )
-    " Although the glob should already be sorted alphabetically in ascending
-    " order, we'd better be sure and sort the list on our own, too. 
-    let l:backupfiles = sort( l:backupfiles )
+    " glob() filters out file patterns defined in 'wildignore'. If someone wants
+    " to ignore backup files for command-mode file name completion and puts the
+    " backup file pattern into 'wildignore', this function will break. 
+    " Thus, the 'wildignore' option is temporarily reset here. 
+    if has('wildignore')
+	let l:save_wildignore = &wildignore
+	set wildignore=
+    endif
+    try
+	" glob() will do the right thing and return an empty list if
+	" a:adjustedBackupFilespec doesn't yet exist, because no backup has yet been
+	" made. 
+	let l:backupfiles = split( glob( a:adjustedBackupFilespec . s:versionFileGlob ), "\n" )
+
+	" Although the glob should already be sorted alphabetically in ascending
+	" order, we'd better be sure and sort the list on our own, too. 
+	let l:backupfiles = sort( l:backupfiles )
 "****D echo '**** backupfiles: ' . l:backupfiles
-    return l:backupfiles
+	return l:backupfiles
+    finally
+	if has('wildignore')
+	    let &wildignore = l:save_wildignore
+	endif
+    endtry
+
 endfunction
 
 function! s:RemoveNewerBackupsFrom( backupfiles, currentVersion )
