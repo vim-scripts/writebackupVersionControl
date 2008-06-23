@@ -57,11 +57,13 @@
 "   To change the default diffsplit from vertical to horizontal, use: 
 "	let g:writebackup_DiffVertSplit = 0
 "
-" Copyright: (C) 2007 by Ingo Karkat
+" Copyright: (C) 2007-2008 by Ingo Karkat
 "   The VIM LICENSE applies to this script; see ':help copyright'. 
 "
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 " REVISION	DATE		REMARKS 
+"   1.20.010	13-Jun-2008	Added -bar to all commands that do not take any
+"				arguments, so that these can be chained together. 
 "   1.20.009	30-Dec-2007	:WriteBackupListVersions and
 "				:WriteBackupDiffWithPred claimed "no backups
 "				exist" if option 'wildignore' hides the backup
@@ -721,12 +723,12 @@ function! s:WriteBackupOfSavedOriginal( filespec )
 endfunction
 
 "- commands -------------------------------------------------------------------
-command! WriteBackupDiffWithPred	:call <SID>DiffWithPred(expand('%'))
-command! WriteBackupListVersions	:call <SID>ListVersions(expand('%'))
-command! WriteBackupIsBackedUp		:call <SID>IsBackedUp(expand('%'))
-command! WriteBackupRestoreFromPred	:call <SID>RestoreFromPred(expand('%'))
-command! WriteBackupRestoreThisBackup	:call <SID>RestoreThisBackup(expand('%'))
-"command! WriteBackupDeleteLastBackup
-command! WriteBackupOfSavedOriginal	:call <SID>WriteBackupOfSavedOriginal(expand('%'))
+command! -bar WriteBackupDiffWithPred		:call <SID>DiffWithPred(expand('%'))
+command! -bar WriteBackupListVersions		:call <SID>ListVersions(expand('%'))
+command! -bar WriteBackupIsBackedUp		:call <SID>IsBackedUp(expand('%'))
+command! -bar WriteBackupRestoreFromPred	:call <SID>RestoreFromPred(expand('%'))
+command! -bar WriteBackupRestoreThisBackup	:call <SID>RestoreThisBackup(expand('%'))
+"command! -bar WriteBackupDeleteLastBackup
+command! -bar WriteBackupOfSavedOriginal	:call <SID>WriteBackupOfSavedOriginal(expand('%'))
 
 " vim: set sts=4 sw=4 noexpandtab ff=unix fdm=syntax :
