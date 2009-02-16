@@ -1,91 +1,20 @@
-" writebackupVersionControl.vim: Version control functions (diff, restore) for
-" writebackup.vim backups with date file extension (format '.YYYYMMDD[a-z]'). 
-"
-" DESCRIPTION:
-"   This script enhances the primitive file backup mechanism provided by
-"   writebackup.vim with some functions of real revision control systems like
-"   CVS, RCS or Subversion - without additional software. 
-"   Via VIM commands, you can list and go to all backup versions that exist
-"   for the current file, check whether you have a current backup, backup the
-"   saved version of the buffer even after you've made unsaved changes in the
-"   buffer (which is useful for after-the-fact backups). 
-"   Within VIM, you can create a diff with the previous version, restore the
-"   current file from its predecessor or any other backed-up version. 
-"
-" USAGE:
-"   :WriteBackupDiffWithPred
-"	Performs a diff of the current file (which may be the current version or
-"	an older backup) with the previous version. The diff is done inside VIM,
-"	with a new diffsplit being opened. 
-"
-"   :WriteBackupListVersions
-"	List all backup versions that exist for the current file. If the file
-"	isn't the current version, it is marked in the version list. If the file
-"	is the current version, the time that has passed since the last backup
-"	is printed, too. 
-"
-"   :[count]WriteBackupGoPrev[!]
-"   :[count]WriteBackupGoNext[!]
-"	Edit a backup file version relative to the current backup or original
-"	file. You can skip multiple backups via the optional [count]; if the
-"	resulting index is out of bounds, the first / last available backup
-"	version is edited. Thus, :999WriteBackupGoPrev edits the very first
-"	existing backup, and :999WriteBackupGoNext edits the latest backup. 
-"	With [!], any changes to the current version are discarded. 
-"
-"   :WriteBackupGoOriginal[!]
-"	Edit the original of the current backup file. If backups are stored in a
-"	different directory, it may not be possible to determine the original
-"	file. 
-"	With [!], any changes to the current version are discarded. 
-"
-"   :WriteBackupIsBackedUp
-"	Checks whether the latest backup is identical to the (saved version of
-"	the) current file (which must be the latest version). 
-"
-"   :WriteBackupRestoreFromPred
-"	Overwrites the current file (which must be the latest version) with its
-"	latest backup. 
-"
-"   :WriteBackupRestoreThisBackup
-"	Restores the current file as the latest version, which will be
-"	overwritten. 
-"
-"   :WriteBackupOfSavedOriginal
-"	Instead of backing up the current buffer, back up the saved version of
-"	the buffer. This comes handy when you realize you need a backup only
-"	after you've made changes to the buffer. 
-"
-" INSTALLATION:
-"   Put the script into your user or system VIM plugin directory (e.g.
-"   ~/.vim/plugin). 
+" writebackupVersionControl.vim: Version control functions (diff, restore,
+" history navigation) for writebackup.vim backups with date file extension
+" (format '.YYYYMMDD[a-z]'). 
 "
 " DEPENDENCIES:
 "   - Requires VIM 7.0 or higher. 
 "   - Requires writebackup.vim (vimscript #1828). 
 "   - External commands 'diff', 'cp' (Unix), 'copy' (Windows). 
 "
-" CONFIGURATION:
-"   For a permanent configuration, put the following commands into your vimrc
-"   file (see :help vimrc). 
-"						  *g:WriteBackup_DiffVertSplit*
-"   To change the default diffsplit from vertical to horizontal, use: 
-"	let g:WriteBackup_DiffVertSplit = 0
-"
-" INTEGRATION:
-" LIMITATIONS:
-" ASSUMPTIONS:
-" KNOWN PROBLEMS:
-" TODO:
-"   - Implement s:Copy() via readfile() / writefile() VIM functions in binary
-"     mode as a fallback or configurable. 
-"
 " Copyright: (C) 2007-2009 by Ingo Karkat
 "   The VIM LICENSE applies to this script; see ':help copyright'. 
 "
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
-let s:version = 140
+"
+let s:version = 141
 " REVISION	DATE		REMARKS 
+"   1.41.021	16-Feb-2009	Split off documentation into separate help file. 
 "   1.40.020	13-Feb-2009	Extracted version number and put on a more
 "				prominent place, so that it gets updated. 
 "   1.40.019	11-Feb-2009	Factored out s:WarningMsg(). 
@@ -173,7 +102,7 @@ let s:version = 140
 "				cases
 "	0.01	30-Oct-2006	file creation
 
-" Avoid installing twice or when in compatible mode
+" Avoid installing twice or when in unsupported VIM version. 
 if exists('g:loaded_writebackupVersionControl') || (v:version < 700)
     finish
 endif
