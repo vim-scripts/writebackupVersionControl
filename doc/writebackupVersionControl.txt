@@ -1,9 +1,10 @@
-*writebackupVersionControl.txt*      Version control for writebackup.vim backups. 
+*writebackupVersionControl.txt*      Version control for writebackup backups. 
 
 		WRITE BACKUP VERSION CONTROL    by Ingo Karkat
 
-Version control functions (diff, restore, history navigation) for
-writebackup.vim backups with date file extension (format '.YYYYMMDD[a-z]'). 
+Version control functions (diff, restore, history navigation) for backups made
+with the writebackup plugin, which have a date file extension in the format
+'.YYYYMMDD[a-z]'. 
 
 					    *writebackupVersionControl.vim*
 description			|WriteBackupVersionControl-description|
@@ -34,19 +35,18 @@ current file from its predecessor or any other backed-up version.
 USAGE					     *WriteBackupVersionControl-usage*
 
 						    *:WriteBackupDiffWithPred*
-:WriteBackupDiffWithPred			    
-			Performs a diff of the current file (which may be the
-			current version or an older backup) with the previous
+:WriteBackupDiffWithPred
+			Perform a diff of the current file (which may be the
+			original file or any backup) with the previous
 			version. The diff is done inside VIM, with a new
 			diffsplit being opened. 
 						    *:WriteBackupListVersions*
 :WriteBackupListVersions
 			List all backup versions that exist for the current
-			file. If the file isn't the current version, it is
-			marked in the version list. If the file is the current
-			version, the time that has passed since the last
-			backup is printed, too. 
-
+			file. If the file isn't the original, it is marked in
+			the version list. If the file is the original, the
+			time that has passed since the last backup is printed,
+			too. 
 				     *:WriteBackupGoPrev* *:WriteBackupGoNext*
 :[count]WriteBackupGoPrev[!]
 :[count]WriteBackupGoNext[!]
@@ -57,7 +57,7 @@ USAGE					     *WriteBackupVersionControl-usage*
 			version is edited.
 			Thus, :999WriteBackupGoPrev edits the very first
 			existing backup, and :999WriteBackupGoNext edits the
-			latest backup.
+			latest (i.e. most recent) backup.
 			With [!], any changes to the current version are
 			discarded. 
 
@@ -70,25 +70,39 @@ USAGE					     *WriteBackupVersionControl-usage*
 
 						      *:WriteBackupIsBackedUp*
 :WriteBackupIsBackedUp
-			Checks whether the latest backup is identical to the
+			Check whether the latest backup is identical to the
 			(saved version of the) current file (which must be the
-			latest version). 
+			original file). 
 						 *:WriteBackupRestoreFromPred*
-:WriteBackupRestoreFromPred
-			Overwrites the current file (which must be the latest
-			version) with its latest backup. 
+:WriteBackupRestoreFromPred[!]
+			Overwrite the current file (which must be the
+			original) with its latest backup. With [!] skips
+			confirmation dialog and allows to restore over
+			readonly original file. 
 
 					       *:WriteBackupRestoreThisBackup*
-:WriteBackupRestoreThisBackup
-			Restores the current file as the latest version, which
-			will be overwritten. 
+:WriteBackupRestoreThisBackup[!]
+			Restore the current file as the original file, which
+			will be overwritten. With [!] skips confirmation
+			dialog and allows to restore over readonly original
+			file. 
 
 						 *:WriteBackupOfSavedOriginal*
-:WriteBackupOfSavedOriginal
+:WriteBackupOfSavedOriginal[!]
 			Instead of backing up the current buffer, back up the
 			saved version of the buffer. This comes handy when you
 			realize you need a backup only after you've made
 			changes to the buffer. 
+			With [!], creation of a new backup file is forced: 
+			- even if the last backup is identical
+			- even when no more backup versions (for this day) are
+			  available (the last '.YYYYMMDDz' backup gets
+			  overwritten, even if it is readonly)
+
+						*:WriteBackupDeleteLastBackup*
+:WriteBackupDeleteLastBackup[!]
+			Delete the last backup. With [!] skips confirmation
+			dialog and allows to delete readonly backup file. 
 
 ==============================================================================
 INSTALLATION			      *WriteBackupVersionControl-installation*
@@ -101,20 +115,31 @@ vimball or via the|:UseVimball|command. >
     :so %
 To uninstall, use the|:RmVimball|command. 
 
-				      *WriteBackupVersionControl-dependencies*
+DEPENDENCIES			      *WriteBackupVersionControl-dependencies*
+
 - Requires VIM 7.0 or higher. 
-- Requires writebackup.vim (vimscript #1828). 
-- External commands 'diff', 'cp' (Unix), 'copy' (Windows). 
+- Requires the writebackup plugin (vimscript #1828). 
+- External commands "cmp" or "diff" (or equivalent) for comparison. 
+- External commands "cp" (Unix) / "copy" and "xcopy" (Windows) for restore
+  and backup original file functionality. 
 
 ==============================================================================
 CONFIGURATION			     *WriteBackupVersionControl-configuration*
 
-For a permanent configuration, put the following commands into your vimrc file
+For a permanent configuration, put the following commands into your|vimrc|file
 (see :help vimrc). 
-    					  *g:WriteBackup_DiffVertSplit*
+						 *g:WriteBackup_DiffVertSplit*
 To change the default diffsplit from vertical to horizontal, use: >
     let g:WriteBackup_DiffVertSplit = 0
 <
+					   *g:WriteBackup_CompareShellCommand*
+The :WriteBackupIsBackedUp command uses an external compare command (either
+"cmp -s" or "diff -q") to determine whether the backup is identical with the
+original file. You can overwrite the auto-detected default via: >
+    let g:WriteBackup_CompareShellCommand = '/path/to/mycomparecmd --myoption'
+The command must take two filespec arguments, return 0 for identical files, 1
+for different files and anything else for trouble. 
+
 ==============================================================================
 INTEGRATION			       WriteBackupVersionControl-integration
 
@@ -130,14 +155,29 @@ KNOWN PROBLEMS			    WriteBackupVersionControl-known-problems
 ==============================================================================
 TODO					      *WriteBackupVersionControl-todo*
 
+IDEAS									     *
 - Implement s:Copy() via readfile() / writefile() VIM functions in binary mode
-  as a fallback or configurable. 
-- Use diff -q to avoid output. 
-- Catch newer date of backup than current (00:00:-5), happened on Samba share. 
-- Use readfile() when diff not available. 
+  as a fallback or configurable? 
+- Use readfile() when diff not available (or as an optimization to avoid
+  spawning a shell on Windows)? Maybe just checking the first n lines?
+- Use :[s]view in backup navigation (one should not write backups)?
 
 ==============================================================================
 HISTORY					   *WriteBackupVersionControl-history*
+
+2.00	22-Feb-2009
+- Using separate autoload script to help speed up VIM startup. This is an
+  incompatible change that also requires the corresponding writebackup plugin
+  version. *** PLEASE UPDATE writebackup (vimscript #1828), too ***
+- BF: :WriteBackupListVersions now handles (and reports) backup files with a
+  future date.
+- ENH: Allowing to configure compare shell command via
+  g:WriteBackup_CompareShellCommand. 
+- ENH: Added :WriteBackupDeleteLastBackup command. 
+- ENH: Added [!] to the following commands to disable confirmation dialog and
+  override readonly target files: :WriteBackupRestoreFromPred, 
+  :WriteBackupRestoreThisBackup, :WriteBackupOfSavedOriginal, 
+  :WriteBackupDeleteLastBackup	
 
 1.41	16-Feb-2009
 Split off documentation into separate help file. Now packaging as VimBall. 
@@ -166,7 +206,7 @@ temporarily resetting the option before glob().
 1.20	18-Sep-2007
 - ENH: Added support for writing backup files into a different directory
   (either one static backup dir or relative to the original file). Now
-  requires writebackup.vim version 1.20 or later.
+  requires writebackup version 1.20 or later.
 - Command :WriteBackupOfSavedOriginal now checks that the file is an original
   one.
 - BF: :WriteBackupIsBackedUp doesn't deal correctly with filenames that
