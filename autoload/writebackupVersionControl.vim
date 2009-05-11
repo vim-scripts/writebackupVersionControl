@@ -11,6 +11,11 @@
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS 
+"   2.01.006	11-May-2009	Backup versions are now opened read-only
+"				(through :WriteBackupGoPrev/Next and
+"				:WriteBackupDiffWithPred commands) to prevent
+"				the user from accidentally editing the backup
+"				instead of the original. 
 "   2.00.005	22-Feb-2009	Added a:isForced argument to all functions that
 "				implement commands which now support forcing via !. 
 "				writebackupVersionControl#WriteBackupOfSavedOriginal()
@@ -348,7 +353,7 @@ function! s:GetRelativeBackup( filespec, relativeIndex )
     return [get( l:backupFiles, l:newIndex, '' ), '']
 endfunction
 
-function! s:EditFile( filespec, isBang )
+function! s:EditFile( filespec, isBang, isReadonly )
 "*******************************************************************************
 "* PURPOSE:
 "   Edit a:filespec in the current window (via :edit). 
@@ -360,11 +365,12 @@ function! s:EditFile( filespec, isBang )
 "   a:filespec	Backup or original file.
 "   a:isBang	Flag whether any changes to the current buffer should be
 "		discarded. 
+"   a:isReadonly    Flag whether the file should be opened read-only. 
 "* RETURN VALUES: 
 "   None. 
 "*******************************************************************************
     try
-	execute 'edit' . (a:isBang ? '!' : '') escape( tr( a:filespec, '\', '/'), ' \%#' )
+	execute (a:isReadonly ? 'view' : 'edit') . (a:isBang ? '!' : '') escape( tr( a:filespec, '\', '/'), ' \%#' )
     catch /^Vim\%((\a\+)\)\=:E/
 	call s:VimExceptionMsg(v:exception)
     endtry
@@ -395,7 +401,7 @@ function! writebackupVersionControl#WriteBackupGoOriginal( filespec, isBang )
 	if empty( l:originalFilespec )
 	    call s:ErrorMsg('Unable to determine the location of the original file.')
 	else
-	    call s:EditFile(l:originalFilespec, a:isBang)
+	    call s:EditFile(l:originalFilespec, a:isBang, 0)
 	endif
     catch /^WriteBackup\%(VersionControl\)\?:/
 	call s:ExceptionMsg(v:exception)
@@ -421,7 +427,7 @@ function! writebackupVersionControl#WriteBackupGoBackup( filespec, isBang, relat
     try
 	let [l:backupFilespec, l:errorMessage] = s:GetRelativeBackup(a:filespec, a:relativeIndex)
 	if empty(l:errorMessage)
-	    call s:EditFile(l:backupFilespec, a:isBang)
+	    call s:EditFile(l:backupFilespec, a:isBang, 1)
 	else
 	    call s:ErrorMsg(l:errorMessage)
 	endif
@@ -451,17 +457,24 @@ function! writebackupVersionControl#DiffWithPred( filespec )
 	    call s:ErrorMsg(l:errorMessage)
 	else
 "****D echo '**** predecessor is ' . l:predecessor
-	    " Close all folds before :diffsplit; this avoids that a previous (open)
-	    " fold status at the cursor position is remembered and obscures the
-	    " actual differences. 
+	    " Close all folds before the diffsplit; this avoids that a previous
+	    " (open) fold status at the cursor position is remembered and
+	    " obscures the actual differences. 
 	    if has('folding') | setlocal foldlevel=0 | endif
 
-	    let l:splittype = (g:WriteBackup_DiffVertSplit ? 'vert ' : '') . 'diffsplit'
+	    " The :diffsplit command doesn't allow to open the file read-only;
+	    " using ':setlocal readonly' afterwards leaves an unnecessary
+	    " swapfile. Thus, we use :sview to open the file and use :diffthis
+	    " on both windows. 
+	    diffthis
+
+	    let l:splittype = (g:WriteBackup_DiffVertSplit ? 'vertical ' : '') . 'sview'
 
 	    " Expand the predecessor's filespec to an absolute path, because the CWD
 	    " may change when a file is opened (e.g. due to autocmds or :set
 	    " autochdir). 
 	    execute l:splittype . ' ' . escape( tr( fnamemodify(l:predecessor, ':p'), '\', '/'), ' \%#' )
+	    diffthis
 
 	    " Return to original window. 
 	    wincmd p
