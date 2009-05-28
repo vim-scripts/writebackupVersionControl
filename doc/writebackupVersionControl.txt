@@ -19,7 +19,7 @@ history				|WriteBackupVersionControl-history|
 DESCRIPTION			       *WriteBackupVersionControl-description*
 
 This script enhances the primitive file backup mechanism provided by
-|writebackup.vim|with some functions of real revision control systems like
+|writebackup.vim| with some functions of real revision control systems like
 CVS, RCS or Subversion - without additional software. 
 Via Vim commands, you can list and go to all backup versions that exist for
 the current file, check whether you have a current backup, backup the saved
@@ -105,13 +105,13 @@ USAGE					     *WriteBackupVersionControl-usage*
 ==============================================================================
 INSTALLATION			      *WriteBackupVersionControl-installation*
 
-This script is packaged as a|vimball|. If you have the "gunzip" decompressor
+This script is packaged as a |vimball|. If you have the "gunzip" decompressor
 in your PATH, simply edit the *.vba.gz package in Vim; otherwise, decompress
 the archive first, e.g. using WinZip. Inside Vim, install by sourcing the
-vimball or via the|:UseVimball|command. >
+vimball or via the |:UseVimball| command. >
     vim writebackupVersionControl.vba.gz
     :so %
-To uninstall, use the|:RmVimball|command. 
+To uninstall, use the |:RmVimball| command. 
 
 DEPENDENCIES			      *WriteBackupVersionControl-dependencies*
 
@@ -124,8 +124,8 @@ DEPENDENCIES			      *WriteBackupVersionControl-dependencies*
 ==============================================================================
 CONFIGURATION			     *WriteBackupVersionControl-configuration*
 
-For a permanent configuration, put the following commands into your|vimrc|file
-(see :help vimrc). 
+For a permanent configuration, put the following commands into your |vimrc|:
+
 						 *g:WriteBackup_DiffVertSplit*
 To change the default diffsplit from vertical to horizontal, use: >
     let g:WriteBackup_DiffVertSplit = 0
@@ -151,6 +151,10 @@ IDEAS									    *
 
 ==============================================================================
 HISTORY					   *WriteBackupVersionControl-history*
+
+2.10	27-May-2009
+Replaced simple filespec escaping with built-in fnameescape() function (or
+emulation for Vim 7.0 / 7.1) via escapings.vim wrapper.
 
 2.01	11-May-2009
 Backup versions are now opened read-only (through :WriteBackupGoPrev/Next and
@@ -212,7 +216,7 @@ Started development.
 
 ==============================================================================
 Copyright: (C) 2007-2009 by Ingo Karkat
-The VIM LICENSE applies to this script; see|copyright|. 
+The VIM LICENSE applies to this script; see |copyright|. 
 
 Maintainer:	Ingo Karkat <ingo@karkat.de>
 ==============================================================================

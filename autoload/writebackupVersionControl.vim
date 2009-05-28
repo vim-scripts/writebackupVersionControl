@@ -3,6 +3,7 @@
 " date file extension in the format '.YYYYMMDD[a-z]'. 
 "
 " DEPENDENCIES:
+"   - escapings.vim autoload script. 
 "   - External copy command "cp" (Unix), "copy" and "xcopy" (Windows). 
 "
 " Copyright: (C) 2007-2009 by Ingo Karkat
@@ -11,6 +12,15 @@
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS 
+"   2.10.007	27-May-2009	Replaced simple filespec escaping with
+"				built-in fnameescape() function (or emulation
+"				for Vim 7.0 / 7.1) via escapings.vim wrapper. 
+"				Now reducing the filespec to shortest possible
+"				(:~:.) before opening a file. This avoids ugly
+"				long buffer names when :set noautochdir.  
+"				For the diffsplit, do not expand the
+"				predecessor's filespec to an absolute
+"				path any more; this is not necessary. 
 "   2.01.006	11-May-2009	Backup versions are now opened read-only
 "				(through :WriteBackupGoPrev/Next and
 "				:WriteBackupDiffWithPred commands) to prevent
@@ -29,7 +39,7 @@
 "				Replaced s:DualDigit() with printf('%02d')
 "				formatting. 
 "				Factored out s:VimExceptionMsg() and added catch
-"				block for VIM errors in missing places. 
+"				block for Vim errors in missing places. 
 "				Factored s:AreIdentical() out of
 "				writebackupVersionControl#IsBackedUp() and added
 "				public function
@@ -103,6 +113,26 @@ function! s:IsFileReadonly( filespec )
     return filereadable(a:filespec) && ! filewritable(a:filespec)
 endfunction
 
+function! s:FnameShortenAndEscape( filespec )
+"*******************************************************************************
+"* PURPOSE:
+"   Escapes the passed a:filespec for use in an ex command. In addition, the
+"   filespec is reduced to its shortest possible representation to avoid ugly
+"   long buffer names when :set noautochdir. 
+"
+"* ASSUMPTIONS / PRECONDITIONS:
+"	? List of any external variable, control, or other element whose state affects this procedure.
+"* EFFECTS / POSTCONDITIONS:
+"	? List of the procedure's effect on each external variable, control, or other element.
+"* INPUTS:
+"   a:filespec	File. 
+"* RETURN VALUES: 
+"   Shortened filespec suitable for immediate (no more commands that may change
+"   the CWD!) consumption in an ex command. 
+"*******************************************************************************
+    return escapings#fnameescape(fnamemodify(a:filespec, ':~:.'))
+endfunction
+
 "- conversion functions -------------------------------------------------------
 function! writebackupVersionControl#IsOriginalFile( filespec )
     return a:filespec !~? s:versionRegexp
@@ -158,7 +188,7 @@ function! s:GetOriginalFilespec( filespec, isForDisplayingOnly )
 	    " a one-way transformation from multiple directories to one backup
 	    " directory. 
 	    "
-	    " TODO: Look for original file candidates in all VIM buffers via bufname(). 
+	    " TODO: Look for original file candidates in all Vim buffers via bufname(). 
 	    "
 	    " When we fail, return an empty string to indicate that the original
 	    " filespec could not be resolved. However, if the filespec is only
@@ -360,7 +390,7 @@ function! s:EditFile( filespec, isBang, isReadonly )
 "* ASSUMPTIONS / PRECONDITIONS:
 "   None. 
 "* EFFECTS / POSTCONDITIONS:
-"   Prints VIM error message if the file cannot be edited. 
+"   Prints Vim error message if the file cannot be edited. 
 "* INPUTS:
 "   a:filespec	Backup or original file.
 "   a:isBang	Flag whether any changes to the current buffer should be
@@ -370,7 +400,7 @@ function! s:EditFile( filespec, isBang, isReadonly )
 "   None. 
 "*******************************************************************************
     try
-	execute (a:isReadonly ? 'view' : 'edit') . (a:isBang ? '!' : '') escape( tr( a:filespec, '\', '/'), ' \%#' )
+	execute (a:isReadonly ? 'view' : 'edit') . (a:isBang ? '!' : '') s:FnameShortenAndEscape(a:filespec)
     catch /^Vim\%((\a\+)\)\=:E/
 	call s:VimExceptionMsg(v:exception)
     endtry
@@ -445,7 +475,7 @@ function! writebackupVersionControl#DiffWithPred( filespec )
 "* EFFECTS / POSTCONDITIONS:
 "   Opens a diffsplit with the predecessor, or: 
 "   Prints error message.
-"   Prints VIM error message if the split cannot be created. 
+"   Prints Vim error message if the split cannot be created. 
 "* INPUTS:
 "   a:filespec	Backup or original file.
 "* RETURN VALUES: 
@@ -469,12 +499,12 @@ function! writebackupVersionControl#DiffWithPred( filespec )
 	    diffthis
 
 	    let l:splittype = (g:WriteBackup_DiffVertSplit ? 'vertical ' : '') . 'sview'
-
-	    " Expand the predecessor's filespec to an absolute path, because the CWD
-	    " may change when a file is opened (e.g. due to autocmds or :set
-	    " autochdir). 
-	    execute l:splittype . ' ' . escape( tr( fnamemodify(l:predecessor, ':p'), '\', '/'), ' \%#' )
+	    execute l:splittype s:FnameShortenAndEscape(l:predecessor)
 	    diffthis
+	    " Note: We're assuming here that the ':sview l:predecessor' cannot
+	    " fail, since we've just determined the predecessor via a file glob. 
+	    " If we were not so sure, we would need to check and undo the
+	    " :diffthis on the current window in case of failure here. 
 
 	    " Return to original window. 
 	    wincmd p
@@ -801,7 +831,7 @@ function! s:Restore( source, target, isForced, confirmationMessage )
 	endif
     endif
 
-    " We could restore using only VIM functionality:
+    " We could restore using only Vim functionality:
     "	edit! a:target
     " 	normal ggdG
     " 	0read a:source
@@ -809,7 +839,7 @@ function! s:Restore( source, target, isForced, confirmationMessage )
     " That would have the following disadvantages: 
     " - the target's modification date would be different from the one
     "   of the source, which would fool superficial synchronization tools. 
-    " - There's the (small) risk that VIM autocmds or settings like
+    " - There's the (small) risk that Vim autocmds or settings like
     "   'fileencoding' or 'fileformat' are now different from when the backup
     "   was written, and may thus lead to conversion errors or different file
     "   contents. 
@@ -885,7 +915,7 @@ function! writebackupVersionControl#RestoreThisBackup( filespec, isForced )
 	endif
 
 	if s:Restore( a:filespec, l:originalFilespec, a:isForced, printf("Really override '%s' with this backup '%s'?", l:originalFilespec, l:currentVersion) )
-	    execute 'edit! ' . escape( tr( l:originalFilespec, '\', '/'), ' \%#' )
+	    execute 'edit! ' . s:FnameShortenAndEscape(l:originalFilespec)
 	endif
     catch /^Vim\%((\a\+)\)\=:E/
 	call s:VimExceptionMsg(v:exception)

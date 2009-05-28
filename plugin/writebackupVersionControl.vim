@@ -3,7 +3,7 @@
 " date file extension in the format '.YYYYMMDD[a-z]'.
 "
 " DEPENDENCIES:
-"   - Requires VIM 7.0 or higher. 
+"   - Requires Vim 7.0 or higher. 
 "
 "   - writebackup plugin (vimscript #1828). 
 "   - writebackupVersionControl.vim autoload script. 
@@ -15,8 +15,10 @@
 "
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
-let s:version = 200
+let s:version = 210
 " REVISION	DATE		REMARKS 
+"   2.10.027	27-May-2009	Changes in the autoload script; just bumped
+"				version number here. 
 "   2.00.026	22-Feb-2009	ENH: Added [!] to the following commands to
 "				disable confirmation dialog and override
 "				readonly target files: 
@@ -100,7 +102,7 @@ let s:version = 200
 "   1.00.006	07-Mar-2007	Added documentation. 
 "	0.05	06-Dec-2006	Factored out Copy() function. 
 "				Implemented :WriteBackupOfSavedOriginal command. 
-"	0.04	16-Nov-2006	BF: '%' and '#' must also be escaped for VIM. 
+"	0.04	16-Nov-2006	BF: '%' and '#' must also be escaped for Vim. 
 "	0.03	02-Nov-2006	ENH: Added user information that IsBackedUp()
 "				compares with saved version, not modified
 "				buffer. 
@@ -109,7 +111,7 @@ let s:version = 200
 "				with CWD, especially on Windows systems with UNC
 "				paths. 
 "				BF: In DiffWithPred() and RestoreThisBackup(),
-"				convert the filespec to VIM syntax. 
+"				convert the filespec to Vim syntax. 
 "	0.02	31-Oct-2006	Added WriteBackupListVersions. 
 "				Added EchoElapsedTimeSinceVersion as an add-on
 "				to WriteBackupListVersions. 
@@ -120,7 +122,7 @@ let s:version = 200
 "				cases
 "	0.01	30-Oct-2006	file creation
 
-" Avoid installing twice or when in unsupported VIM version. 
+" Avoid installing twice or when in unsupported Vim version. 
 if exists('g:loaded_writebackupVersionControl') || (v:version < 700)
     finish
 endif
