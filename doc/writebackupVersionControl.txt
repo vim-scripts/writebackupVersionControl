@@ -32,11 +32,13 @@ current file from its predecessor or any other backed-up version.
 USAGE					     *WriteBackupVersionControl-usage*
 
 						    *:WriteBackupDiffWithPred*
-:WriteBackupDiffWithPred
+:[count]WriteBackupDiffWithPred
 			Perform a diff of the current file (which may be the
-			original file or any backup) with the previous
-			version. The diff is done inside Vim, with a new
-			diffsplit being opened. 
+			original file or any backup) with the [count]th
+			previous version. If the resulting index is out of
+			bounds, the first available backup version is used.
+			The diff is done inside Vim, with a new diffsplit
+			being opened. 
 						    *:WriteBackupListVersions*
 :WriteBackupListVersions
 			List all backup versions that exist for the current
@@ -151,6 +153,10 @@ IDEAS									    *
 
 ==============================================================================
 HISTORY					   *WriteBackupVersionControl-history*
+
+2.11	24-Jun-2009
+ENH: :WriteBackupDiffWithPred now takes an optional [count] to diff with an
+earlier predecessor. 
 
 2.10	27-May-2009
 Replaced simple filespec escaping with built-in fnameescape() function (or

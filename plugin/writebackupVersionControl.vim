@@ -17,6 +17,9 @@
 "
 let s:version = 210
 " REVISION	DATE		REMARKS 
+"   2.11.028	24-Jun-2009	ENH: :WriteBackupDiffWithPred now takes an
+"				optional [count] to diff with an earlier
+"				predecessor. 
 "   2.10.027	27-May-2009	Changes in the autoload script; just bumped
 "				version number here. 
 "   2.00.026	22-Feb-2009	ENH: Added [!] to the following commands to
@@ -159,7 +162,7 @@ if ! exists('g:WriteBackup_CompareShellCommand')
 endif
 
 "- commands -------------------------------------------------------------------
-command! -bar WriteBackupDiffWithPred		    call writebackupVersionControl#DiffWithPred(expand('%'))
+command! -bar -count=1 WriteBackupDiffWithPred	    call writebackupVersionControl#DiffWithPred(expand('%'), <count>)
 command! -bar WriteBackupListVersions		    call writebackupVersionControl#ListVersions(expand('%'))
 command! -bar -bang -count=1 WriteBackupGoPrev	    call writebackupVersionControl#WriteBackupGoBackup(expand('%'), <bang>0, -1 * <count>)
 command! -bar -bang -count=1 WriteBackupGoNext	    call writebackupVersionControl#WriteBackupGoBackup(expand('%'), <bang>0, <count>)

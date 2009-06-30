@@ -12,6 +12,9 @@
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS 
+"   2.11.008	24-Jun-2009	ENH: :WriteBackupDiffWithPred now takes an
+"				optional [count] to diff with an earlier
+"				predecessor. 
 "   2.10.007	27-May-2009	Replaced simple filespec escaping with
 "				built-in fnameescape() function (or emulation
 "				for Vim 7.0 / 7.1) via escapings.vim wrapper. 
@@ -466,10 +469,10 @@ function! writebackupVersionControl#WriteBackupGoBackup( filespec, isBang, relat
     endtry
 endfunction
 
-function! writebackupVersionControl#DiffWithPred( filespec )
+function! writebackupVersionControl#DiffWithPred( filespec, count )
 "*******************************************************************************
 "* PURPOSE:
-"   Creates a diff with the predecessor of the passed a:filespec. 
+"   Creates a diff with the a:count'th predecessor of the passed a:filespec. 
 "* ASSUMPTIONS / PRECONDITIONS:
 "   None. 
 "* EFFECTS / POSTCONDITIONS:
@@ -478,11 +481,12 @@ function! writebackupVersionControl#DiffWithPred( filespec )
 "   Prints Vim error message if the split cannot be created. 
 "* INPUTS:
 "   a:filespec	Backup or original file.
+"   a:count	Number of predecessors to go back. 
 "* RETURN VALUES: 
 "   None. 
 "*******************************************************************************
     try
-	let [l:predecessor, l:errorMessage] = s:GetRelativeBackup( a:filespec, -1 )
+	let [l:predecessor, l:errorMessage] = s:GetRelativeBackup( a:filespec, -1 * a:count )
 	if ! empty(l:errorMessage)
 	    call s:ErrorMsg(l:errorMessage)
 	else
