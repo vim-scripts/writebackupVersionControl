@@ -31,14 +31,6 @@ current file from its predecessor or any other backed-up version.
 ==============================================================================
 USAGE					     *WriteBackupVersionControl-usage*
 
-						    *:WriteBackupDiffWithPred*
-:[count]WriteBackupDiffWithPred
-			Perform a diff of the current file (which may be the
-			original file or any backup) with the [count]th
-			previous version. If the resulting index is out of
-			bounds, the first available backup version is used.
-			The diff is done inside Vim, with a new diffsplit
-			being opened. 
 						    *:WriteBackupListVersions*
 :WriteBackupListVersions
 			List all backup versions that exist for the current
@@ -73,6 +65,46 @@ USAGE					     *WriteBackupVersionControl-usage*
 			Check whether the latest backup is identical to the
 			(saved version of the) current file (which must be the
 			original file). 
+						    *:WriteBackupDiffWithPred*
+:[count]WriteBackupDiffWithPred
+			Perform a diff of the current file (which may be the
+			original file or any backup) with the [count]'th
+			previous version. If the resulting index is out of
+			bounds, the first available backup version is used.
+			The diff is done inside Vim, with a new |:diffsplit|
+			being opened. 
+						*:WriteBackupViewDiffWithPred*
+:[count]WriteBackupViewDiffWithPred [{diff-arguments}]
+			Show the differences of the current file (which may be
+			the original file or any backup) with the [count]'th
+			previous version. If the resulting index is out of
+			bounds, the first available backup version is used.
+			The diff output is opened in a split scratch buffer. 
+			Any {diff-arguments} are passed as-is to the diff
+			executable. The "icase" and "iwhite" settings of
+			'diffopt' are used, too. 
+			The current working directory is used as the diff root
+			directory (in which the diff command will be invoked)
+			You can set the diff root via: >
+			:lcd {diff-root} | WriteBackupViewDiffWithPred | lcd -
+<			Use the |:saveas| command if you want to persist the
+			diff scratch buffer on disk. Rename the scratch buffer
+			via the |:file| command if you want to keep it and
+			prevent further updates. 
+
+			By repeating the command, an existing scratch buffer
+			is updated; no new split is created. One can also
+			update the differences by repeating the command
+			(without a [count]) in the diff scratch buffer itself. 
+			Different {diff-arguments} can be specified, though;
+			for example, you can change a context diff created via >
+			    :WriteBackupViewDiffWithPred -c
+<			into the unified format by repeating via >
+			    :WriteBackupViewDiffWithPred -u 
+<
+			If you repeat with a [count], a new predecessor is
+			chosen for the updated diff; the newer file is kept. 
+
 						 *:WriteBackupRestoreFromPred*
 :WriteBackupRestoreFromPred[!]
 			Overwrite the current file (which must be the
@@ -119,7 +151,8 @@ DEPENDENCIES			      *WriteBackupVersionControl-dependencies*
 
 - Requires Vim 7.0 or higher. 
 - Requires the writebackup plugin (vimscript #1828). 
-- External commands "cmp" or "diff" (or equivalent) for comparison. 
+- External command "cmp" or "diff" (or equivalent) for comparison. 
+- External command "diff" or equivalent for listing of differences. 
 - External commands "cp" (Unix) / "copy" and "xcopy" (Windows) for restore
   and backup original file functionality. 
 
@@ -133,13 +166,30 @@ To change the default diffsplit from vertical to horizontal, use: >
     let g:WriteBackup_DiffVertSplit = 0
 <
 					   *g:WriteBackup_CompareShellCommand*
-The :WriteBackupIsBackedUp command uses an external compare command (either
+The |:WriteBackupIsBackedUp| command uses an external compare command (either
 "cmp -s" or "diff -q") to determine whether the backup is identical with the
 original file. You can overwrite the auto-detected default via: >
     let g:WriteBackup_CompareShellCommand = '/path/to/mycomparecmd --myoption'
 The command must take two filespec arguments, return 0 for identical files, 1
 for different files and anything else for trouble. 
 
+					      *g:WriteBackup_DiffShellCommand*
+The |:WriteBackupViewDiffWithPred| command invokes an external diff command to
+list the differences between two files. Overwrite if "diff" cannot be found
+through $PATH: >
+    let g:WriteBackup_DiffShellCommand = '/path/to/mydiff'
+<
+				     *g:WriteBackup_DiffCreateAlwaysArguments*
+Command-line arguments for the external diff command can be specified
+separately. Configure any arguments that should always be passed here: >
+    let g:WriteBackup_DiffCreateAlwaysArguments = '-t -F "^[_a-zA-Z0-9]+ *("'
+<
+				    *g:WriteBackup_DiffCreateDefaultArguments*
+If no {diff-arguments} are passed to the |:WriteBackupViewDiffWithPred|
+command, the default diff output format is set to the unified format. You can
+for example change this to a context diff by setting: >
+    let g:WriteBackup_DiffCreateDefaultArguments = '-c'
+<
 ==============================================================================
 KNOWN PROBLEMS			    *WriteBackupVersionControl-known-problems*
 
@@ -153,6 +203,11 @@ IDEAS									    *
 
 ==============================================================================
 HISTORY					   *WriteBackupVersionControl-history*
+
+2.20	09-Jul-2009
+ENH: Added :WriteBackupViewDiffWithPred command to show the diff output in a
+scratch buffer. With this, one can get a quick overview of what has changed
+since the last backup without performing a diffsplit within Vim. 
 
 2.11	24-Jun-2009
 ENH: :WriteBackupDiffWithPred now takes an optional [count] to diff with an

@@ -1,6 +1,9 @@
 " escapings.vim: Common escapings of filenames, and wrappers around new Vim 7.2
 " fnameescape() and shellescape() functions. 
 "
+" Copyright: (C) 2009 by Ingo Karkat
+"   The VIM LICENSE applies to this script; see ':help copyright'. 
+"
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS 

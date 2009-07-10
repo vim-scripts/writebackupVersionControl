@@ -4,6 +4,7 @@
 "
 " DEPENDENCIES:
 "   - escapings.vim autoload script. 
+"   - ingobuffer.vim autoload script. 
 "   - External copy command "cp" (Unix), "copy" and "xcopy" (Windows). 
 "
 " Copyright: (C) 2007-2009 by Ingo Karkat
@@ -12,6 +13,14 @@
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS 
+"   2.20.010	09-Jul-2009	The diff files are now saved in
+"				b:WriteBackup_DiffSettings so that the diff can
+"				be updated from within the diff scratch buffer. 
+"   2.20.009	08-Jul-2009	ENH: Added
+"				writebackupVersionControl#ViewDiffWithPred() for
+"				the implemation of the
+"				:WriteBackupViewDiffWithPred command
+"				to show the diff output in a scratch buffer. 
 "   2.11.008	24-Jun-2009	ENH: :WriteBackupDiffWithPred now takes an
 "				optional [count] to diff with an earlier
 "				predecessor. 
@@ -513,6 +522,121 @@ function! writebackupVersionControl#DiffWithPred( filespec, count )
 	    " Return to original window. 
 	    wincmd p
 	endif
+    catch /^Vim\%((\a\+)\)\=:E/
+	call s:VimExceptionMsg(v:exception)
+    catch /^WriteBackup\%(VersionControl\)\?:/
+	call s:ExceptionMsg(v:exception)
+    endtry
+endfunction
+function! s:GetDiffOptions( diffOptions )
+    let l:vimDiffOptions = split(&diffopt, ',')
+    let l:diffOptions = [
+    \	g:WriteBackup_DiffCreateAlwaysArguments,
+    \	(empty(a:diffOptions) ? g:WriteBackup_DiffCreateDefaultArguments : a:diffOptions),
+    \	(index(l:vimDiffOptions, 'icase') == -1 ? '' : '-i'),
+    \	(index(l:vimDiffOptions, 'iwhite') == -1 ? '' : '-b')
+    \]
+    return join( filter(l:diffOptions, '! empty(v:val)'), ' ')
+endfunction
+function! writebackupVersionControl#ViewDiffWithPred( filespec, count, diffOptions )
+"*******************************************************************************
+"* PURPOSE:
+"   Shows the output of the diff with the a:count'th predecessor of the passed
+"   a:filespec or of the files associated with the current diff scratch buffer
+"   in a scratch buffer. 
+"* ASSUMPTIONS / PRECONDITIONS:
+"   None. 
+"* EFFECTS / POSTCONDITIONS:
+"   Opens / updates the scratch buffer with the diff output, or: 
+"   Prints error message.
+"   Prints Vim error message if the split cannot be created. 
+"* INPUTS:
+"   a:filespec	Backup or original file.
+"   a:count	Number of predecessors to go back, 0 if no count was given. 
+"   a:diffOptions   Optional command-line arguments passed to the diff command. 
+"* RETURN VALUES: 
+"   None. 
+"*******************************************************************************
+    try
+	if exists('b:WriteBackup_DiffSettings')
+	    " We're in a diff scratch buffer; reuse the files that were used
+	    " when creating this diff. 
+	    let l:scratchFilename = b:WriteBackup_DiffSettings.scratchFilename
+	    let l:rootDirspec = b:WriteBackup_DiffSettings.rootDirspec
+	    let l:newFile = b:WriteBackup_DiffSettings.newFile
+	    if a:count
+		" Another predecessor version is selected via the given [count]. 
+		let [l:predecessor, l:errorMessage] = s:GetRelativeBackup(l:newFile, -1 * a:count)
+		if ! empty(l:errorMessage)
+		    call s:ErrorMsg(l:errorMessage)
+		    return
+		endif
+		let l:oldFile = fnamemodify(l:predecessor, ':.')
+	    else
+		" No [count] was given; keep the previously used predecessor. 
+		let l:oldFile = b:WriteBackup_DiffSettings.oldFile
+	    endif
+	else
+	    let [l:predecessor, l:errorMessage] = s:GetRelativeBackup(a:filespec, -1 * (a:count ? a:count : 1))
+	    if ! empty(l:errorMessage)
+		call s:ErrorMsg(l:errorMessage)
+		return
+	    endif
+
+	    " Base the diff working directory on the current window's CWD. 
+	    " This way, one can set the diff root through: 
+	    " :lcd {diff-root} | WriteBackupViewDiffWithPred | lcd -
+	    let l:rootDirspec = getcwd()
+
+	    " The scratch file is created in the diff root, using the original file name
+	    " with an appended '.diff' extension. To that, also append
+	    " ' [Scratch]', to signal that this buffer doesn't persist.  
+	    " Note: Because we only need the filename, not the filespec, we use
+	    " s:GetAdjustedBackupFilespec(), not s:GetOriginalFilespec(); the
+	    " latter one may fail when backups aren't created in the same
+	    " directory as the original file. 
+	    let l:scratchFilename = fnamemodify(s:GetAdjustedBackupFilespec(a:filespec), ':t') . '.diff [Scratch]'
+
+	    let l:oldFile = fnamemodify(l:predecessor, ':.')
+	    let l:newFile = fnamemodify(a:filespec, ':.')
+	endif
+
+	" Note: For the :! command, the '!' character must be escaped (cp.
+	" shellescape() with {special}); we assume that in the diff options,
+	" the normal escaping for ex commands has been done by the user. 
+	" Note: Specify filespecs relative to the diff root, i.e. the
+	" current window's CWD. 
+	let l:diffCmd = printf('%s %s %s %s', g:WriteBackup_DiffShellCommand,
+	\	escape(s:GetDiffOptions(a:diffOptions), '!'),
+	\	escapings#shellescape(l:oldFile),
+	\	escapings#shellescape(l:newFile)
+	\)
+
+	if ! ingobuffer#MakeScratchBuffer(
+	\	l:rootDirspec,
+	\	l:scratchFilename,
+	\	1,
+	\	'silent 1read !' . l:diffCmd,
+	\	'topleft new'
+	\)
+	    return
+	endif
+	setlocal filetype=diff
+
+	" Save the files that participate in the diff so that the diff can be
+	" updated from within the diff scratch buffer by re-executing
+	" :WriteBackupViewDiffWithPred. 
+	" Also save the actual scratch buffer name to correctly handle renamings
+	" of the diff scratch buffer via :saveas or :file. 
+	let b:WriteBackup_DiffSettings = {
+	\	'rootDirspec' : l:rootDirspec,
+	\	'oldFile' : l:oldFile,
+	\	'newFile' : l:newFile,
+	\	'scratchFilename' : fnamemodify(bufname(''), ':t')
+	\}
+
+	redraw
+	echo l:diffCmd
     catch /^Vim\%((\a\+)\)\=:E/
 	call s:VimExceptionMsg(v:exception)
     catch /^WriteBackup\%(VersionControl\)\?:/
