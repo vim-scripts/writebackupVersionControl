@@ -13,6 +13,25 @@
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS 
+"   2.21.013	16-Jul-2009	Added
+"				g:WriteBackup_ScratchBufferCommandModifiers
+"				configuration. 
+"				ENH: Now issuing a warning that there are no
+"				differences and closing the useless diff scratch
+"				buffer if it is empty. 
+"   2.21.012	14-Jul-2009	BF: Forgot {special} in shellescape() call for
+"				writebackupVersionControl#ViewDiffWithPred();
+"				the scratch buffer uses the ! command. 
+"   2.21.011	10-Jul-2009	The creation / update of the scratch buffer
+"				positions the cursor on the first line. In case
+"				of a simple refresh within the diff scratch
+"				buffer, the former cursor position should be
+"				kept. 
+"				Now checking for empty
+"				g:WriteBackup_DiffShellCommand and printing
+"				error. 
+"				Using escapings#shellescape() for system() calls
+"				instead of simply enclosing in double quotes. 
 "   2.20.010	09-Jul-2009	The diff files are now saved in
 "				b:WriteBackup_DiffSettings so that the diff can
 "				be updated from within the diff scratch buffer. 
@@ -558,6 +577,11 @@ function! writebackupVersionControl#ViewDiffWithPred( filespec, count, diffOptio
 "   None. 
 "*******************************************************************************
     try
+	if empty(g:WriteBackup_DiffShellCommand)
+	    throw 'WriteBackupVersionControl: No diff shell command configured. Unable to show differences to predecessor.'
+	endif
+
+	let l:save_cursor = []
 	if exists('b:WriteBackup_DiffSettings')
 	    " We're in a diff scratch buffer; reuse the files that were used
 	    " when creating this diff. 
@@ -575,6 +599,10 @@ function! writebackupVersionControl#ViewDiffWithPred( filespec, count, diffOptio
 	    else
 		" No [count] was given; keep the previously used predecessor. 
 		let l:oldFile = b:WriteBackup_DiffSettings.oldFile
+
+		" Keep the current cursor position on a simple refresh of the
+		" differences. 
+		let l:save_cursor = getpos('.')
 	    endif
 	else
 	    let [l:predecessor, l:errorMessage] = s:GetRelativeBackup(a:filespec, -1 * (a:count ? a:count : 1))
@@ -608,8 +636,8 @@ function! writebackupVersionControl#ViewDiffWithPred( filespec, count, diffOptio
 	" current window's CWD. 
 	let l:diffCmd = printf('%s %s %s %s', g:WriteBackup_DiffShellCommand,
 	\	escape(s:GetDiffOptions(a:diffOptions), '!'),
-	\	escapings#shellescape(l:oldFile),
-	\	escapings#shellescape(l:newFile)
+	\	escapings#shellescape(l:oldFile, 1),
+	\	escapings#shellescape(l:newFile, 1)
 	\)
 
 	if ! ingobuffer#MakeScratchBuffer(
@@ -617,10 +645,30 @@ function! writebackupVersionControl#ViewDiffWithPred( filespec, count, diffOptio
 	\	l:scratchFilename,
 	\	1,
 	\	'silent 1read !' . l:diffCmd,
-	\	'topleft new'
+	\	g:WriteBackup_ScratchBufferCommandModifiers . ' new'
 	\)
 	    return
 	endif
+	
+	if line('$') == 1 && empty(getline(1))
+	    " The diff scratch buffer is empty: There are no differences, so
+	    " discard the useless window and show a warning instead. 
+	    bdelete
+
+	    redraw
+	    let l:savedMsg = (&l:modified ? 'saved ' : '') 
+	    call s:WarningMsg(printf("No differences reported between %s and backup '%s' of '%s'.",
+	    \	(writebackupVersionControl#IsOriginalFile(a:filespec) ?
+	    \	    'the current ' . l:savedMsg . 'version' :
+	    \	    l:savedMsg . "backup '" . s:GetVersion(a:filespec) . "'"
+	    \	),
+	    \	s:GetVersion(l:predecessor),
+	    \	s:GetOriginalFilespec(a:filespec, 1)
+	    \))
+
+	    return
+	endif
+
 	setlocal filetype=diff
 
 	" Save the files that participate in the diff so that the diff can be
@@ -634,6 +682,13 @@ function! writebackupVersionControl#ViewDiffWithPred( filespec, count, diffOptio
 	\	'newFile' : l:newFile,
 	\	'scratchFilename' : fnamemodify(bufname(''), ':t')
 	\}
+
+	" The creation / update of the scratch buffer positions the cursor on
+	" the first line. In case of a simple refresh within the diff scratch
+	" buffer, the former cursor position should be kept. 
+	if ! empty(l:save_cursor)
+	    call setpos('.', l:save_cursor)
+	endif
 
 	redraw
 	echo l:diffCmd
@@ -804,12 +859,17 @@ function! s:AreIdentical( filespec1, filespec2 )
 
     " Expand filespecs to absolute paths to avoid problems with CWD, especially
     " on Windows systems with UNC paths. 
-    let l:diffCmd = g:WriteBackup_CompareShellCommand . ' "' . fnamemodify(a:filespec1, ':p') . '" "' . fnamemodify(a:filespec2, ':p') . '"'
+    let l:diffCmd = printf('%s %s %s', 
+    \	g:WriteBackup_CompareShellCommand,
+    \	escapings#shellescape(fnamemodify(a:filespec1, ':p')),
+    \	escapings#shellescape(fnamemodify(a:filespec2, ':p'))
+    \)
 
     " Using the system() command even though we're not interested in the command
     " output (which is suppressed via command-line arguments to the compare
     " shell command, anyway). This is because on Windows GVIM, the system() call
     " does not (briefly) open a Windows shell window, but ':silent !{cmd}' does. 
+    " system() also does not unintentionally trigger the 'autowrite' feature. 
     call system( l:diffCmd )
 "****D echo '**** ' . g:WriteBackup_CompareShellCommand . ' return code=' . v:shell_error
 
@@ -913,12 +973,17 @@ function! s:Copy( source, target, isForced )
     if has('win32') || has('win64')
 	" On Windows, 'copy' cannot overwrite a readonly target; only 'xcopy'
 	" can (with the /R option). 
-	let l:copyCmd = (s:IsFileReadonly(a:target) ? 'xcopy /Q /R /Y' : 'copy /Y') . ' "' . l:sourceFilespec . '" "' . l:targetFilespec . '"'
+	let l:copyShellCmd = (s:IsFileReadonly(a:target) ? 'xcopy /Q /R /Y' : 'copy /Y')
     elseif has('unix')
-	let l:copyCmd = (s:IsFileReadonly(a:target) ? 'cp -f' : 'cp') . ' -- "' . l:sourceFilespec . '" "' . l:targetFilespec . '"'
+	let l:copyShellCmd = (s:IsFileReadonly(a:target) ? 'cp -f' : 'cp') . ' --'
     else
 	throw 'WriteBackupVersionControl: Unsupported operating system type.'
     endif
+    let l:copyCmd = printf('%s %s %s',
+    \	l:copyShellCmd,
+    \	escapings#shellescape(l:sourceFilespec),
+    \	escapings#shellescape(l:targetFilespec)
+    \)
 
     let l:cmdOutput = system(l:copyCmd)
     if v:shell_error != 0

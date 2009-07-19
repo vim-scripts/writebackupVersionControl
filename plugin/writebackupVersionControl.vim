@@ -16,8 +16,20 @@
 "
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
-let s:version = 220
+let s:version = 221
 " REVISION	DATE		REMARKS 
+"   2.21.032	16-Jul-2009	Added
+"				g:WriteBackup_ScratchBufferCommandModifiers to
+"				configure the location where the diff scratch
+"				buffer is opened. Changed default from 'topleft
+"				new' to 'new'; in contrast to the :DiffCreate
+"				command, there usually won't be a diff split
+"				open. 
+"   2.21.031	10-Jul-2009	BF: Detection of
+"				g:WriteBackup_CompareShellCommand left variable
+"				unset if no command detected. 
+"				Added detection for
+"				g:WriteBackup_DiffShellCommand. 
 "   2.20.030	09-Jul-2009	:WriteBackupViewDiffWithPred has a default
 "				count of 0 to be able to detect no given count.
 "				Also removed -bar because passed diff arguments
@@ -165,15 +177,20 @@ if ! exists('g:WriteBackup_CompareShellCommand')
     elseif executable('diff')
 	" -q	Report no details of the differences. 
 	let g:WriteBackup_CompareShellCommand = 'diff -q'
+    else
+	let g:WriteBackup_CompareShellCommand = ''
     endif
 endif
 
 " Shell command used to diff two files for the :WriteBackupViewDiffWithPred
 " command. 
 if ! exists('g:WriteBackup_DiffShellCommand')
-    let g:WriteBackup_DiffShellCommand = 'diff'
+    if executable('diff')
+	let g:WriteBackup_DiffShellCommand = 'diff'
+    else
+	let g:WriteBackup_DiffShellCommand = ''
+    endif
 endif
-
 " Command-line arguments which are always passed to the diff shell command. 
 if ! exists('g:WriteBackup_DiffCreateAlwaysArguments')
     let g:WriteBackup_DiffCreateAlwaysArguments = ''
@@ -183,6 +200,13 @@ endif
 if ! exists('g:WriteBackup_DiffCreateDefaultArguments')
     let g:WriteBackup_DiffCreateDefaultArguments = '-u'
 endif
+
+" Vim command modifiers (:topleft, :belowright, :vertical, etc.) applied when
+" opening the diff scratch buffer. 
+if ! exists('g:WriteBackup_ScratchBufferCommandModifiers')
+    let g:WriteBackup_ScratchBufferCommandModifiers = ''
+endif
+
 
 "- commands -------------------------------------------------------------------
 command! -bar -count=1 WriteBackupDiffWithPred		    call writebackupVersionControl#DiffWithPred(expand('%'), <count>)

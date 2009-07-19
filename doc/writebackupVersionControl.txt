@@ -190,6 +190,12 @@ command, the default diff output format is set to the unified format. You can
 for example change this to a context diff by setting: >
     let g:WriteBackup_DiffCreateDefaultArguments = '-c'
 <
+				 *g:WriteBackup_ScratchBufferCommandModifiers*
+The |:WriteBackupViewDiffWithPred| command opens the diff scratch buffer via
+the |:new| command. You can add window command modifiers like |:vertical| or
+|:topleft| to change the positioning of the window: >
+    let g:WriteBackup_ScratchBufferCommandModifiers = 'topleft'
+<
 ==============================================================================
 KNOWN PROBLEMS			    *WriteBackupVersionControl-known-problems*
 
@@ -203,6 +209,17 @@ IDEAS									    *
 
 ==============================================================================
 HISTORY					   *WriteBackupVersionControl-history*
+
+2.21	16-Jul-2009
+- Replaced simple filespec quoting with built-in shellescape() function (or
+  emulation for Vim 7.0 / 7.1) via escapings.vim wrapper. 
+- Keeping cursor position when only refreshing the diff scratch buffer. 
+- Window position of the diff scratch buffer can now be configured. 
+- ENH: Now issuing a warning that there are no differences and closing the
+  useless diff scratch buffer if it is empty. 
+- BF: Forgot {special} in shellescape() call for
+  writebackupVersionControl#ViewDiffWithPred(); the scratch buffer uses the !
+  command. 
 
 2.20	09-Jul-2009
 ENH: Added :WriteBackupViewDiffWithPred command to show the diff output in a
