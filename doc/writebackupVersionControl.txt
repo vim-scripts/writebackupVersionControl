@@ -210,6 +210,11 @@ IDEAS									    *
 ==============================================================================
 HISTORY					   *WriteBackupVersionControl-history*
 
+2.22	19-Aug-2009
+BF: escapings#shellescape() caused E118 on Vim 7.1. The shellescape({string})
+function exists since Vim 7.0.111, but shellescape({string}, {special}) was
+only introduced with Vim 7.2. Enhanced wrapper function. 
+
 2.21	16-Jul-2009
 - Replaced simple filespec quoting with built-in shellescape() function (or
   emulation for Vim 7.0 / 7.1) via escapings.vim wrapper. 
