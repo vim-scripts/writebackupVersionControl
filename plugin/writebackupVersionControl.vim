@@ -16,8 +16,11 @@
 "
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
-let s:version = 221
+let s:version = 223
 " REVISION	DATE		REMARKS 
+"   2.23.033	26-Oct-2009	ENH: :WriteBackupRestoreFromPred now takes an
+"				optional [count] to restore an earlier
+"				predecessor. 
 "   2.21.032	16-Jul-2009	Added
 "				g:WriteBackup_ScratchBufferCommandModifiers to
 "				configure the location where the diff scratch
@@ -216,7 +219,7 @@ command! -bar -bang -count=1 WriteBackupGoPrev	    	    call writebackupVersionC
 command! -bar -bang -count=1 WriteBackupGoNext	    	    call writebackupVersionControl#WriteBackupGoBackup(expand('%'), <bang>0, <count>)
 command! -bar -bang WriteBackupGoOriginal	    	    call writebackupVersionControl#WriteBackupGoOriginal(expand('%'), <bang>0)
 command! -bar WriteBackupIsBackedUp		    	    call writebackupVersionControl#IsBackedUp(expand('%'))
-command! -bar -bang WriteBackupRestoreFromPred	    	    call writebackupVersionControl#RestoreFromPred(expand('%'), <bang>0)
+command! -bar -bang -count=1 WriteBackupRestoreFromPred	    call writebackupVersionControl#RestoreFromPred(expand('%'), <bang>0, <count>)
 command! -bar -bang WriteBackupRestoreThisBackup    	    call writebackupVersionControl#RestoreThisBackup(expand('%'), <bang>0)
 command! -bar -bang WriteBackupOfSavedOriginal	    	    call writebackupVersionControl#WriteBackupOfSavedOriginal(expand('%'), <bang>0)
 command! -bar -bang WriteBackupDeleteLastBackup	    	    call writebackupVersionControl#DeleteBackupLastBackup(expand('%'), <bang>0)

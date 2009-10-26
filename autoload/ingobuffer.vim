@@ -6,12 +6,44 @@
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS 
+"	004	15-Oct-2009	ENH: ingobuffer#MakeScratchBuffer() now allows
+"				to omit (via empty string) the a:scratchCommand
+"				Ex command, and will then keep the scratch
+"				buffer writable. 
+"	003	04-Sep-2009	ENH: If a:scratchIsFile is false and
+"				a:scratchDirspec is empty, there will be only
+"				one scratch buffer with the same
+"				a:scratchFilename, regardless of the scratch
+"				buffer's directory path. This also fixes Vim
+"				errors on the :file command when s:Bufnr() has
+"				determined that there is no existing buffer,
+"				when in fact there is. 
+"				Replaced ':normal ...dd' with :delete, and not
+"				clobbering the unnamed register any more. 
+"	002	01-Sep-2009	Added ingobuffer#MakeTempfile(). 
 "	001	05-Jan-2009	file creation
 
 function! ingobuffer#CombineToFilespec( dirspec, filename )
     " Use path separator as exemplified by the passed dirspec. 
     let l:pathSeparator = (a:dirspec =~# '\' && a:dirspec !~# '/' ? '\' : '/')
     return a:dirspec . (a:dirspec =~# '^$\|[/\\]$' ? '' : l:pathSeparator) . a:filename
+endfunction
+
+function! ingobuffer#MakeTempfile( filename )
+    let l:tempdirs = [$TEMP, $TMP]
+
+    if has('dos16') || has('dos32') || has('win95') || has('win32') || has('win64') 
+	call extend(l:tempdirs, [$HOMEDRIVE . $HOMEPATH, $WINDIR . '\Temp', 'C:\temp'])
+    else
+	call extend(l:tempdirs, [$HOME . '/tmp', '/tmp'])
+    endif
+
+    for l:tempdir in l:tempdirs
+	if filewritable(l:tempdir) == 2
+	    return ingobuffer#CombineToFilespec(l:tempdir, a:filename)
+	endif
+    endfor
+    throw 'MakeTempfile: No writable temp directory found!'
 endfunction
 
 function! ingobuffer#NextScratchFilename( filespec )
@@ -24,15 +56,24 @@ function! ingobuffer#NextScratchFilename( filespec )
 	return substitute(a:filespec, '\d\+\]$', (l:number + 1) . ']', '')
     endif
 endfunction
-function! s:Bufnr( dirspec, filename )
-    return bufnr(
-    \	escapings#bufnameescape(
-    \	    fnamemodify(
-    \		ingobuffer#CombineToFilespec(a:dirspec, a:filename),
-    \		'%:p'
-    \	    )
-    \   )
-    \)
+function! s:Bufnr( dirspec, filename, isFile )
+    if empty(a:dirspec) && ! a:isFile
+	" This scratch buffer does not behave like a file and is not tethered to
+	" a particular directory; there should be only one scratch buffer with
+	" this name in the Vim session. 
+	" Do a partial search for the buffer name matching any file name in any
+	" directory. 
+	return bufnr('/'. escapings#bufnameescape(a:filename, 0) . '$')
+    else
+	return bufnr(
+	\   escapings#bufnameescape(
+	\	fnamemodify(
+	\	    ingobuffer#CombineToFilespec(a:dirspec, a:filename),
+	\	    '%:p'
+	\	)
+	\   )
+	\)
+    endif
 endfunction
 function! s:ChangeDir( dirspec )
     if empty( a:dirspec )
@@ -70,9 +111,13 @@ function! ingobuffer#MakeScratchBuffer( scratchDirspec, scratchFilename, scratch
 "			either :w! or :w <newname>. 
 "   a:scratchIsFile	Flag whether the scratch buffer should behave like a
 "			file (i.e. adapt to changes in the global CWD), or not. 
+"			If false and a:scratchDirspec is empty, there will be
+"			only one scratch buffer with the same a:scratchFilename,
+"			regardless of the scratch buffer's directory path. 
 "   a:scratchCommand	Ex :read command to populate the scratch buffer. Use
 "			:1read so that the first empty line will be kept; it is
-"			deleted automatically. 
+"			deleted automatically. Pass empty string if you want to
+"			populate the scratch buffer yourself. 
 "   a:windowOpenCommand	Ex command to open the scratch window, e.g. :vnew or
 "			:topleft new. 
 "* RETURN VALUES: 
@@ -86,7 +131,7 @@ function! ingobuffer#MakeScratchBuffer( scratchDirspec, scratchFilename, scratch
     let l:currentWinNr = winnr()
     let l:status = 0
 
-    let l:scratchBufnr = s:Bufnr(a:scratchDirspec, a:scratchFilename)
+    let l:scratchBufnr = s:Bufnr(a:scratchDirspec, a:scratchFilename, a:scratchIsFile)
     let l:scratchWinnr = bufwinnr(l:scratchBufnr)
 "****D echomsg '**** bufnr=' . l:scratchBufnr 'winnr=' . l:scratchWinnr
     if l:scratchWinnr == -1
@@ -119,16 +164,21 @@ function! ingobuffer#MakeScratchBuffer( scratchDirspec, scratchFilename, scratch
 
     call s:ChangeDir(a:scratchDirspec)
     setlocal noreadonly
-    silent normal! ggdG
+    silent %delete _
     " Note: ':silent' to suppress the "--No lines in buffer--" message. 
 
-    execute a:scratchCommand
-    " ^ Keeps the existing line at the top of the buffer. 
-    " v Deletes it. 
-    normal 1Gdd
+    if ! empty(a:scratchCommand)
+	execute a:scratchCommand
+	" ^ Keeps the existing line at the top of the buffer. 
+	" v Deletes it. 
+	silent 1delete _
+	" Note: ':silent' to suppress deletion message if ':set report=0'. 
+	
+	setlocal readonly
+    endif
 
     execute 'setlocal buftype=' . s:BufType(a:scratchIsFile)
-    setlocal bufhidden=wipe nobuflisted noswapfile readonly
+    setlocal bufhidden=wipe nobuflisted noswapfile
     return l:status
 endfunction
 

@@ -106,11 +106,11 @@ USAGE					     *WriteBackupVersionControl-usage*
 			chosen for the updated diff; the newer file is kept. 
 
 						 *:WriteBackupRestoreFromPred*
-:WriteBackupRestoreFromPred[!]
+:[count]WriteBackupRestoreFromPred[!]
 			Overwrite the current file (which must be the
-			original) with its latest backup. With [!] skips
-			confirmation dialog and allows to restore over
-			readonly original file. 
+			original) with the [count]'th previous backup. With
+			[!] skips confirmation dialog and allows to restore
+			over readonly original file. 
 
 					       *:WriteBackupRestoreThisBackup*
 :WriteBackupRestoreThisBackup[!]
@@ -209,6 +209,10 @@ IDEAS									    *
 
 ==============================================================================
 HISTORY					   *WriteBackupVersionControl-history*
+
+2.23	26-Oct-2009
+ENH: :WriteBackupRestoreFromPred now takes an optional [count] to restore an
+earlier predecessor. 
 
 2.22	19-Aug-2009
 BF: escapings#shellescape() caused E118 on Vim 7.1. The shellescape({string})

@@ -13,6 +13,9 @@
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS 
+"   2.23.014	26-Oct-2009	ENH: :WriteBackupRestoreFromPred now takes an
+"				optional [count] to restore an earlier
+"				predecessor. 
 "   2.21.013	16-Jul-2009	Added
 "				g:WriteBackup_ScratchBufferCommandModifiers
 "				configuration. 
@@ -268,7 +271,7 @@ function! s:GetAdjustedBackupFilespec( filespec )
 endfunction
 
 "------------------------------------------------------------------------------
-function! s:VerifyIsOriginalFileAndHasPredecessor( originalFilespec, notOriginalMessage )
+function! s:VerifyIsOriginalFileAndHasPredecessor( originalFilespec, notOriginalMessage, count )
 "*******************************************************************************
 "* PURPOSE:
 "   Checks that a:filespec is not a backup file and that at least one backup for
@@ -282,15 +285,17 @@ function! s:VerifyIsOriginalFileAndHasPredecessor( originalFilespec, notOriginal
 "   a:originalFilespec	Backup or original file (but backup file results in
 "			error message). 
 "   a:notOriginalMessage
+"   a:count	Number of predecessors to go back. 
 "* RETURN VALUES: 
-"   Empty string if verification failed; filespec of predecessor otherwise. 
+"   Empty string if verification failed; filespec of a:count'th predecessor
+"   otherwise. 
 "*******************************************************************************
     if ! writebackupVersionControl#IsOriginalFile( a:originalFilespec )
 	call s:ErrorMsg(a:notOriginalMessage)
 	return ''
     endif
 
-    let [l:predecessor, l:errorMessage] = s:GetRelativeBackup( a:originalFilespec, -1 )
+    let [l:predecessor, l:errorMessage] = s:GetRelativeBackup( a:originalFilespec, -1 * a:count )
     if ! empty(l:errorMessage)
 	call s:ErrorMsg(l:errorMessage)
     endif
@@ -926,7 +931,7 @@ function! writebackupVersionControl#IsBackedUp( originalFilespec )
 "   None. 
 "*******************************************************************************
     try
-	let l:predecessor = s:VerifyIsOriginalFileAndHasPredecessor( a:originalFilespec, 'You can only check the backup status of the original file, not of backups!' )
+	let l:predecessor = s:VerifyIsOriginalFileAndHasPredecessor( a:originalFilespec, 'You can only check the backup status of the original file, not of backups!', 1 )
 	if empty( l:predecessor )
 	    return
 	endif
@@ -1045,10 +1050,10 @@ function! s:Restore( source, target, isForced, confirmationMessage )
     endtry
     return 1
 endfunction
-function! writebackupVersionControl#RestoreFromPred( originalFilespec, isForced )
+function! writebackupVersionControl#RestoreFromPred( originalFilespec, isForced, count )
 "*******************************************************************************
 "* PURPOSE:
-"   Restores the passed original file with its latest backup. 
+"   Restores the passed original file with its a:count'th backup predecessor. 
 "* ASSUMPTIONS / PRECONDITIONS:
 "   None. 
 "* EFFECTS / POSTCONDITIONS:
@@ -1059,11 +1064,12 @@ function! writebackupVersionControl#RestoreFromPred( originalFilespec, isForced 
 "			error message). 
 "   a:isForced	Flag whether restore should proceed without confirmation and
 "		overwrite readonly original file. 
+"   a:count	Number of predecessors to go back. 
 "* RETURN VALUES: 
 "   None. 
 "*******************************************************************************
     try
-	let l:predecessor = s:VerifyIsOriginalFileAndHasPredecessor( a:originalFilespec, 'You can only restore the original file, not a backup!' )
+	let l:predecessor = s:VerifyIsOriginalFileAndHasPredecessor( a:originalFilespec, 'You can only restore the original file, not a backup!', a:count )
 	if empty(l:predecessor)
 	    return
 	endif
