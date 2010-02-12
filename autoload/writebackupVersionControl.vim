@@ -7,12 +7,27 @@
 "   - ingobuffer.vim autoload script. 
 "   - External copy command "cp" (Unix), "copy" and "xcopy" (Windows). 
 "
-" Copyright: (C) 2007-2009 by Ingo Karkat
+" Copyright: (C) 2007-2010 by Ingo Karkat
 "   The VIM LICENSE applies to this script; see ':help copyright'. 
 "
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS 
+"   2.24.016	12-Feb-2010	BUG: :WriteBackupViewDiffWithPred can cause
+"				E121: Undefined variable: l:predecessor. Similar
+"				issue with a:filespec showing scratch buffer
+"				name in place of the original file name. Now
+"				using l:oldFile and l:newFile instead. 
+"				ENH: Define a local 'du' mapping to quickly
+"				update the diff (of the same version and with
+"				the same options as this time), unless [count]
+"				is given, which sets a different version). 
+"   2.24.015	09-Feb-2010	:WriteBackupViewDiffWithPred not just checks
+"				for empty scratch buffer, but also considers the
+"				diff command exit code. 
+"				BUG: WriteBackupViewDiffWithPred didn't always
+"				go back to the original window when no
+"				differences, but fell back to the next one. 
 "   2.23.014	26-Oct-2009	ENH: :WriteBackupRestoreFromPred now takes an
 "				optional [count] to restore an earlier
 "				predecessor. 
@@ -319,7 +334,7 @@ function! s:GetAllBackupsForFile( filespec )
 "   Sorted list of backup filespecs. 
 "*******************************************************************************
     " glob() filters out file patterns defined in 'wildignore'. If someone wants
-    " to ignore backup files for command-mode file name completion and puts the
+    " to ignore backup files for command mode file name completion and puts the
     " backup file pattern into 'wildignore', this function will break. 
     " Thus, the 'wildignore' option is temporarily reset here. 
     if has('wildignore')
@@ -562,6 +577,17 @@ function! s:GetDiffOptions( diffOptions )
     \]
     return join( filter(l:diffOptions, '! empty(v:val)'), ' ')
 endfunction
+function! s:NoDifferencesMessage( filespec, predecessor )
+    let l:savedMsg = (&l:modified ? 'saved ' : '') 
+    return printf("No differences reported between %s and backup '%s' of '%s'.",
+    \	(writebackupVersionControl#IsOriginalFile(a:filespec) ?
+    \	    'the current ' . l:savedMsg . 'version' :
+    \	    l:savedMsg . "backup '" . s:GetVersion(a:filespec) . "'"
+    \	),
+    \	s:GetVersion(a:predecessor),
+    \	s:GetOriginalFilespec(a:filespec, 1)
+    \)
+endfunction
 function! writebackupVersionControl#ViewDiffWithPred( filespec, count, diffOptions )
 "*******************************************************************************
 "* PURPOSE:
@@ -654,27 +680,55 @@ function! writebackupVersionControl#ViewDiffWithPred( filespec, count, diffOptio
 	\)
 	    return
 	endif
-	
-	if line('$') == 1 && empty(getline(1))
+
+	if v:shell_error < 0 || v:shell_error > 1
+	    let l:save_cursor = [] " Do not restore cursor position. 
+
+	    " The diff command exited with an error. The error message is
+	    " probably shown in the scratch buffer, so don't close it. Alert
+	    " the user with an extra error message. 
+	    redraw
+	    " Always show the actual diff command; this may be useful for
+	    " troubleshooting. 
+	    echo l:diffCmd
+	    call s:ErrorMsg('Diff command failed; shell returned ' . v:shell_error)
+
+	    " By continuing with the execution, the user is able to re-try
+	    " the diff from the diff scratch buffer via the
+	    " :WriteBackupViewDiffWithPred command or "du" mapping, as the diff
+	    " settings will be saved. 
+	elseif line('$') == 1 && empty(getline(1))
 	    " The diff scratch buffer is empty: There are no differences, so
-	    " discard the useless window and show a warning instead. 
+	    " discard the useless window, go back to the original window and
+	    " show a warning instead. 
 	    bdelete
+	    wincmd p
 
 	    redraw
-	    let l:savedMsg = (&l:modified ? 'saved ' : '') 
-	    call s:WarningMsg(printf("No differences reported between %s and backup '%s' of '%s'.",
-	    \	(writebackupVersionControl#IsOriginalFile(a:filespec) ?
-	    \	    'the current ' . l:savedMsg . 'version' :
-	    \	    l:savedMsg . "backup '" . s:GetVersion(a:filespec) . "'"
-	    \	),
-	    \	s:GetVersion(l:predecessor),
-	    \	s:GetOriginalFilespec(a:filespec, 1)
-	    \))
-
+	    " Only show the actual diff command if it doesn't cause the
+	    " Hit-Enter prompt. 
+	    if &cmdheight > 1 | echo l:diffCmd | endif
+	    call s:WarningMsg(s:NoDifferencesMessage(l:newFile, l:oldFile))
 	    return
+	elseif v:shell_error == 0
+	    " The diff buffer is not empty, but the diff command reported no
+	    " differences. (Probably, a unusual diff format like
+	    " --side-by-side has been used.) Keep the buffer, and print a
+	    " simple message. 
+	    setlocal filetype=diff
+
+	    redraw
+	    " Only show the actual diff command if it doesn't cause the
+	    " Hit-Enter prompt. 
+	    if &cmdheight > 1 | echo l:diffCmd | endif
+	    echomsg s:NoDifferencesMessage(l:newFile, l:oldFile)
+	else
+	    setlocal filetype=diff
+
+	    redraw
+	    echo l:diffCmd
 	endif
 
-	setlocal filetype=diff
 
 	" Save the files that participate in the diff so that the diff can be
 	" updated from within the diff scratch buffer by re-executing
@@ -682,21 +736,28 @@ function! writebackupVersionControl#ViewDiffWithPred( filespec, count, diffOptio
 	" Also save the actual scratch buffer name to correctly handle renamings
 	" of the diff scratch buffer via :saveas or :file. 
 	let b:WriteBackup_DiffSettings = {
-	\	'rootDirspec' : l:rootDirspec,
-	\	'oldFile' : l:oldFile,
-	\	'newFile' : l:newFile,
-	\	'scratchFilename' : fnamemodify(bufname(''), ':t')
+	\   'rootDirspec': l:rootDirspec,
+	\   'oldFile': l:oldFile,
+	\   'newFile': l:newFile,
+	\   'scratchFilename': fnamemodify(bufname(''), ':t'),
+	\   'count': a:count,
+	\   'diffOptions': a:diffOptions
 	\}
 
+	" Define a local 'du' mapping to quickly update the diff (of the same
+	" version and with the same options as this time, unless [count] is
+	" given, which sets a different version). 
+	" Note: Instead of escaping a:diffOptions for the mapping, we simply
+	" store them in the b:WriteBackup_DiffSettings and reference that
+	" variable in the mapping. 
+	nnoremap <silent> <buffer> du :<C-u>call writebackupVersionControl#ViewDiffWithPred('', (v:count ? v:count : b:WriteBackup_DiffSettings.count), b:WriteBackup_DiffSettings.diffOptions)<CR>
+	
 	" The creation / update of the scratch buffer positions the cursor on
 	" the first line. In case of a simple refresh within the diff scratch
 	" buffer, the former cursor position should be kept. 
 	if ! empty(l:save_cursor)
 	    call setpos('.', l:save_cursor)
 	endif
-
-	redraw
-	echo l:diffCmd
     catch /^Vim\%((\a\+)\)\=:E/
 	call s:VimExceptionMsg(v:exception)
     catch /^WriteBackup\%(VersionControl\)\?:/

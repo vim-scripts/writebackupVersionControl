@@ -11,12 +11,12 @@
 "   - External command "cmp", "diff" or equivalent for comparison. 
 "   - External command "diff" or equivalent for listing of differences. 
 "
-" Copyright: (C) 2007-2009 by Ingo Karkat
+" Copyright: (C) 2007-2010 by Ingo Karkat
 "   The VIM LICENSE applies to this script; see ':help copyright'. 
 "
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
-let s:version = 223
+let s:version = 224
 " REVISION	DATE		REMARKS 
 "   2.23.033	26-Oct-2009	ENH: :WriteBackupRestoreFromPred now takes an
 "				optional [count] to restore an earlier

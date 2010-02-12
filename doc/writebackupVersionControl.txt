@@ -91,18 +91,20 @@ USAGE					     *WriteBackupVersionControl-usage*
 			diff scratch buffer on disk. Rename the scratch buffer
 			via the |:file| command if you want to keep it and
 			prevent further updates. 
-
+	  + [count]du
 			By repeating the command, an existing scratch buffer
 			is updated; no new split is created. One can also
-			update the differences by repeating the command
-			(without a [count]) in the diff scratch buffer itself. 
-			Different {diff-arguments} can be specified, though;
-			for example, you can change a context diff created via >
+			update the differences by repeating
+			|:WriteBackupViewDiffWithPred| in the diff scratch
+			buffer itself, or through the buffer-local [count]du
+			mapping. The mapping will update with the same diff
+			options used previously; the command can be repeated
+			with the same or different {diff-arguments}. For
+			example, you can change a context diff created via >
 			    :WriteBackupViewDiffWithPred -c
 <			into the unified format by repeating via >
 			    :WriteBackupViewDiffWithPred -u 
-<
-			If you repeat with a [count], a new predecessor is
+<			If you repeat with a [count], a new predecessor is
 			chosen for the updated diff; the newer file is kept. 
 
 						 *:WriteBackupRestoreFromPred*
@@ -210,6 +212,18 @@ IDEAS									    *
 ==============================================================================
 HISTORY					   *WriteBackupVersionControl-history*
 
+2.24	12-Feb-2010
+- ENH: Define a local 'du' mapping to quickly update the diff (of the same
+  version and with the same options as this time), unless [count] is given,
+  which sets a different version). 
+- :WriteBackupViewDiffWithPred not just checks for empty scratch buffer, but
+  also considers the diff command exit code. 
+- BUG: :WriteBackupViewDiffWithPred can cause E121: Undefined variable:
+  l:predecessor. Similar issue with a:filespec showing scratch buffer name in
+  place of the original file name. Now using l:oldFile and l:newFile instead. 
+- BUG: WriteBackupViewDiffWithPred didn't always go back to the original
+  window when no differences, but fell back to the next one.
+
 2.23	26-Oct-2009
 ENH: :WriteBackupRestoreFromPred now takes an optional [count] to restore an
 earlier predecessor. 
@@ -302,7 +316,7 @@ Added documentation. First release.
 Started development. 
 
 ==============================================================================
-Copyright: (C) 2007-2009 by Ingo Karkat
+Copyright: (C) 2007-2010 by Ingo Karkat
 The VIM LICENSE applies to this script; see |copyright|. 
 
 Maintainer:	Ingo Karkat <ingo@karkat.de>
