@@ -8,9 +8,9 @@ with the writebackup plugin, which have a date file extension in the format
 
 					    *writebackupVersionControl.vim*
 description			|WriteBackupVersionControl-description|
-usage	    			|WriteBackupVersionControl-usage|
-installation   			|WriteBackupVersionControl-installation|
-configuration  			|WriteBackupVersionControl-configuration|
+usage				|WriteBackupVersionControl-usage|
+installation			|WriteBackupVersionControl-installation|
+configuration			|WriteBackupVersionControl-configuration|
 known problems			|WriteBackupVersionControl-known-problems|
 todo				|WriteBackupVersionControl-todo|
 history				|WriteBackupVersionControl-history|
@@ -18,7 +18,7 @@ history				|WriteBackupVersionControl-history|
 ==============================================================================
 DESCRIPTION			       *WriteBackupVersionControl-description*
 
-This script enhances the primitive file backup mechanism provided by
+This plugin enhances the primitive file backup mechanism provided by
 |writebackup.vim| with some functions of real revision control systems like
 CVS, RCS or Subversion - without additional software. 
 Via Vim commands, you can list and go to all backup versions that exist for
@@ -152,7 +152,8 @@ To uninstall, use the |:RmVimball| command.
 DEPENDENCIES			      *WriteBackupVersionControl-dependencies*
 
 - Requires Vim 7.0 or higher. 
-- Requires the writebackup plugin (vimscript #1828). 
+- Requires the |writebackup.vim| plugin (vimscript #1828), version 2.00 or
+  higher. 
 - External command "cmp" or "diff" (or equivalent) for comparison. 
 - External command "diff" or equivalent for listing of differences. 
 - External commands "cp" (Unix) / "copy" and "xcopy" (Windows) for restore
@@ -211,6 +212,18 @@ IDEAS									    *
 
 ==============================================================================
 HISTORY					   *WriteBackupVersionControl-history*
+
+2.30	14-Feb-2012
+- ENH: On Windows, :WriteBackupOfSavedOriginal now updates the modification
+  date (via a "copy" trick), and on Unix, :WriteBackupRestoreThisBackup /
+  :WriteBackupRestoreFromPred now keep the backup's modification date. 
+- Expose many internal functions and make all autoload functions behind the
+  various commands now also indicate their success via a boolean / numeric
+  return value. 
+
+2.25	07-Oct-2011 (unreleased)
+Use ingodate#HumanReltime() for a more human output of elapsed time since last
+backup. 
 
 2.24	12-Feb-2010
 - ENH: Define a local 'du' mapping to quickly update the diff (of the same
@@ -316,7 +329,7 @@ Added documentation. First release.
 Started development. 
 
 ==============================================================================
-Copyright: (C) 2007-2010 by Ingo Karkat
+Copyright: (C) 2007-2012 Ingo Karkat
 The VIM LICENSE applies to this script; see |copyright|. 
 
 Maintainer:	Ingo Karkat <ingo@karkat.de>

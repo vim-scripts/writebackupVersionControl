@@ -1,11 +1,53 @@
 " ingobuffer.vim: Custom buffer functions. 
 "
-" Copyright: (C) 2009 by Ingo Karkat
+" Copyright: (C) 2009-2011 by Ingo Karkat
 "   The VIM LICENSE applies to this script; see ':help copyright'. 
 "
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS 
+"	013	26-Oct-2011	Also switch algorithm for
+"				ingobuffer#ExecuteInVisibleBuffer(), because
+"				:hide may destroy the current buffer when
+"				'bufhidden' is set. (This happened in the blame
+"				buffer of vcscommand.vim). 
+"	012	03-Oct-2011	Switch algorithm for
+"				ingobuffer#ExecuteInTempBuffer() from switching
+"				buffers to new split buffer, since the former
+"				had a noticable delay when in a long Vimscript
+"				file, due to re-sync of syntax highlighting. 
+"	011	01-Oct-2011	Factor out more generic
+"				ingobuffer#NextBracketedFilename(). 
+"	010	27-Sep-2011	Add ingobuffer#ExecuteInTempBuffer(), and
+"				ingobuffer#CallInTempBuffer(). 
+"				Also implement ingobuffer#CallInVisibleBuffer()
+"				in the same style. 
+"	009	09-Jul-2011	Have somehow written ingobuffer#MakeTempfile()
+"				without knowledge of the built-in tempname().
+"				Now use that as the primary source of a temp
+"				directory, and only use the other locations as
+"				(probably unnecessary) fallbacks. 
+"	008	12-Apr-2011	Add ingobuffer#ExecuteInVisibleBuffer() for
+"				:AutoSave command. 
+"	007	31-Mar-2011	ingobuffer#MakeScratchBuffer() only deletes the
+"				first line in the scratch buffer if it is
+"				actually empty. 
+"				FIX: Need to check the buftype also when a
+"				window is visible that shows a buffer with the
+"				scratch filename. Otherwise, a buffer containing
+"				a normal file may be re-used as a scratch
+"				buffer. 
+"				Also allow scratch buffer names like
+"				"[Messages]", not just "Messages [Scratch]" in
+"				ingobuffer#NextScratchFilename(). 
+"				Minor: 'buftype' can only contain one particular
+"				word, change regexp-match to exact match. 
+"	006	17-Jan-2011	Added $TMPDIR to ingobuffer#MakeTempfile(). 
+"	005	02-Mar-2010	ENH: ingobuffer#CombineToFilespec() allows
+"				multiple filenames and passing in a single list
+"				of filespec fragments. Improved detection of
+"				desired path separator and falling back to
+"				system default based on 'shellslash' setting. 
 "	004	15-Oct-2009	ENH: ingobuffer#MakeScratchBuffer() now allows
 "				to omit (via empty string) the a:scratchCommand
 "				Ex command, and will then keep the scratch
@@ -23,19 +65,78 @@
 "	002	01-Sep-2009	Added ingobuffer#MakeTempfile(). 
 "	001	05-Jan-2009	file creation
 
-function! ingobuffer#CombineToFilespec( dirspec, filename )
+function! ingobuffer#CombineToFilespec( first, ... )
+"******************************************************************************
+"* PURPOSE:
+"   Concatenate the passed filespec fragments into a filespec, ensuring that all
+"   fragments are combined with proper path separators. 
+"* ASSUMPTIONS / PRECONDITIONS:
+"   None. 
+"* EFFECTS / POSTCONDITIONS:
+"   None. 
+"* INPUTS:
+"   Either pass a dirspec and one or many filenames: 
+"	a:dirspec, a:filename [, a:filename2, ...]
+"   Or a single list containing all filespec fragments. 
+"	[a:dirspec, a:filename, ...]
+"* RETURN VALUES: 
+"   Combined filespec. 
+"******************************************************************************
+    if type(a:first) == type([])
+	let l:dirspec = a:first[0]
+	let l:filenames = a:first[1:]
+    else
+	let l:dirspec = a:first
+	let l:filenames = a:000
+    endif
+
     " Use path separator as exemplified by the passed dirspec. 
-    let l:pathSeparator = (a:dirspec =~# '\' && a:dirspec !~# '/' ? '\' : '/')
-    return a:dirspec . (a:dirspec =~# '^$\|[/\\]$' ? '' : l:pathSeparator) . a:filename
+    if l:dirspec =~# '\' && l:dirspec !~# '/'
+	let l:pathSeparator = '\'
+    elseif l:dirspec =~# '/'
+	let l:pathSeparator = '/'
+    else
+	" The dirspec doesn't contain a path separator, fall back to the
+	" system's default. 
+	let l:defaultPathSeparator = (exists('+shellslash') && ! &shellslash ? '\' : '/')
+	let l:pathSeparator = l:defaultPathSeparator
+    endif
+
+    let l:filespec = l:dirspec
+    for l:filename in l:filenames
+	let l:filename = substitute(l:filename, '^[/\\]', '', '')
+	let l:filespec .= (l:filespec =~# '^$\|[/\\]$' ? '' : l:pathSeparator) . l:filename
+    endfor
+
+    return l:filespec
 endfunction
 
 function! ingobuffer#MakeTempfile( filename )
-    let l:tempdirs = [$TEMP, $TMP]
+"******************************************************************************
+"* PURPOSE:
+"   Generate a filespec in a temporary location. Unlike the built-in
+"   |tempname()| function, this allows specification of the file name (which can
+"   be beneficial if you want to open the temp file in a Vim buffer for the user
+"   to use). Otherwise, prefer tempname(). 
+"* ASSUMPTIONS / PRECONDITIONS:
+"   None. 
+"* EFFECTS / POSTCONDITIONS:
+"   None. 
+"* INPUTS:
+"   a:filename	filename of the temp file. If empty, the function will just
+"		return the name of a writable temp directory, with trailing path
+"		separator. 
+"* RETURN VALUES: 
+"   Temp filespec. 
+"******************************************************************************
+    let l:tempdirs = [fnamemodify(tempname(), ':t')]	" The built-in function should know best about a good temp dir. 
+    let l:tempdirs += [$TEMP, $TMP] " Also check common environment variables. 
 
+    " And finally try operating system-specific places. 
     if has('dos16') || has('dos32') || has('win95') || has('win32') || has('win64') 
-	call extend(l:tempdirs, [$HOMEDRIVE . $HOMEPATH, $WINDIR . '\Temp', 'C:\temp'])
+	let l:tempdirs += [$HOMEDRIVE . $HOMEPATH, $WINDIR . '\Temp', 'C:\temp']
     else
-	call extend(l:tempdirs, [$HOME . '/tmp', '/tmp'])
+	let l:tempdirs += [$TMPDIR, $HOME . '/tmp', '/tmp']
     endif
 
     for l:tempdir in l:tempdirs
@@ -46,15 +147,19 @@ function! ingobuffer#MakeTempfile( filename )
     throw 'MakeTempfile: No writable temp directory found!'
 endfunction
 
-function! ingobuffer#NextScratchFilename( filespec )
-    if a:filespec !~# ' \[\h\+\d*\]$'
-	return a:filespec . ' [Scratch]'
-    elseif a:filespec !~# ' \[\h\+\d\+\]$'
+function! ingobuffer#NextBracketedFilename( filespec, template )
+    let l:templateExpr = '\V\C'. escape(a:template, '\') . '\m'
+    if a:filespec !~# '\%(^\| \)\[' . l:templateExpr . ' \?\d*\]$'
+	return a:filespec . (empty(a:filespec) ? '' : ' ') . '['. a:template . ']'
+    elseif a:filespec !~# '\%(^\| \)\[' . l:templateExpr . ' \?\d\+\]$'
 	return substitute(a:filespec, '\]$', '1]', '')
     else
-	let l:number = matchstr(a:filespec, ' \[\h\+\zs\d\+\ze\]$')
+	let l:number = matchstr(a:filespec, '\%(^\| \)\[' . l:templateExpr . ' \?\zs\d\+\ze\]$')
 	return substitute(a:filespec, '\d\+\]$', (l:number + 1) . ']', '')
     endif
+endfunction
+function! ingobuffer#NextScratchFilename( filespec )
+    return ingobuffer#NextBracketedFilename(a:filespec, 'Scratch')
 endfunction
 function! s:Bufnr( dirspec, filename, isFile )
     if empty(a:dirspec) && ! a:isFile
@@ -114,10 +219,12 @@ function! ingobuffer#MakeScratchBuffer( scratchDirspec, scratchFilename, scratch
 "			If false and a:scratchDirspec is empty, there will be
 "			only one scratch buffer with the same a:scratchFilename,
 "			regardless of the scratch buffer's directory path. 
-"   a:scratchCommand	Ex :read command to populate the scratch buffer. Use
-"			:1read so that the first empty line will be kept; it is
-"			deleted automatically. Pass empty string if you want to
-"			populate the scratch buffer yourself. 
+"   a:scratchCommand	Ex command(s) to populate the scratch buffer, e.g.
+"			":1read myfile". Use :1read so that the first empty line
+"			will be kept (it is deleted automatically), and there
+"			will be no trailing empty line. 
+"			Pass empty string if you want to populate the scratch
+"			buffer yourself. 
 "   a:windowOpenCommand	Ex command to open the scratch window, e.g. :vnew or
 "			:topleft new. 
 "* RETURN VALUES: 
@@ -142,7 +249,7 @@ function! ingobuffer#MakeScratchBuffer( scratchDirspec, scratchFilename, scratch
 	    call s:ChangeDir(a:scratchDirspec)
 	    execute 'silent keepalt file ' . escapings#fnameescape(a:scratchFilename)
 	    let l:status = 4
-	elseif getbufvar(l:scratchBufnr, '&buftype') =~# s:BufType(a:scratchIsFile)
+	elseif getbufvar(l:scratchBufnr, '&buftype') ==# s:BufType(a:scratchIsFile)
 	    execute a:windowOpenCommand
 	    execute l:scratchBufnr . 'buffer'
 	    let l:status = 3
@@ -154,7 +261,13 @@ function! ingobuffer#MakeScratchBuffer( scratchDirspec, scratchFilename, scratch
 	    return ingobuffer#MakeScratchBuffer(a:scratchDirspec, ingobuffer#NextScratchFilename(a:scratchFilename), a:scratchIsFile, a:scratchCommand, a:windowOpenCommand)
 	endif
     else
-	if l:scratchWinnr == l:currentWinNr
+	if getbufvar(l:scratchBufnr, '&buftype') !=# s:BufType(a:scratchIsFile)
+	    " A window with the scratch filespec is already visible, but its
+	    " buffer contains an existing file, not a scratch file. As we don't
+	    " want to jump to this existing file, try again with the next
+	    " scratch filename. 
+	    return ingobuffer#MakeScratchBuffer(a:scratchDirspec, ingobuffer#NextScratchFilename(a:scratchFilename), a:scratchIsFile, a:scratchCommand, a:windowOpenCommand)
+	elseif l:scratchWinnr == l:currentWinNr
 	    let l:status = 1
 	else
 	    execute l:scratchWinnr . 'wincmd w'
@@ -169,9 +282,9 @@ function! ingobuffer#MakeScratchBuffer( scratchDirspec, scratchFilename, scratch
 
     if ! empty(a:scratchCommand)
 	execute a:scratchCommand
-	" ^ Keeps the existing line at the top of the buffer. 
+	" ^ Keeps the existing line at the top of the buffer, if :1{cmd} is used. 
 	" v Deletes it. 
-	silent 1delete _
+	if empty(getline(1)) | silent 1delete _ | endif
 	" Note: ':silent' to suppress deletion message if ':set report=0'. 
 	
 	setlocal readonly
@@ -182,4 +295,95 @@ function! ingobuffer#MakeScratchBuffer( scratchDirspec, scratchFilename, scratch
     return l:status
 endfunction
 
-" vim: set sts=4 sw=4 noexpandtab ff=unix fdm=syntax :
+
+
+function! ingobuffer#ExecuteInVisibleBuffer( bufnr, command )
+"******************************************************************************
+"* PURPOSE:
+"   Invoke an Ex command in a visible buffer. 
+"   Some commands (e.g. :update) operate in the context of the current buffer
+"   and must therefore be visible in a window to be invoked. This function
+"   ensures that the passed command is executed in the context of the passed
+"   buffer number. 
+
+"* ASSUMPTIONS / PRECONDITIONS:
+"	? List of any external variable, control, or other element whose state affects this procedure.
+"* EFFECTS / POSTCONDITIONS:
+"   The current window and buffer loaded into it remain the same. 
+"* INPUTS:
+"   a:bufnr Buffer number of an existing buffer where the function should be
+"   executed in. 
+"   a:command	Ex command to be invoked. 
+"* RETURN VALUES: 
+"   None. 
+"******************************************************************************
+    let l:winnr = bufwinnr(a:bufnr)
+    if l:winnr == -1
+	" The buffer is hidden. Make it visible to execute the passed function. 
+	" Use a temporary split window as ingobuffer#ExecuteInTempBuffer() does,
+	" for all the reasons outlined there. 
+	let l:originalWindowLayout = winrestcmd()
+	    execute 'noautocmd silent keepalt leftabove sbuffer' a:bufnr
+	try
+	    execute a:command
+	finally
+	    noautocmd silent close
+	    silent! execute l:originalWindowLayout
+	endtry
+    else
+	" The buffer is visible in at least one window on this tab page. 
+	let l:currentWinNr = winnr()
+	execute l:winnr . 'wincmd w'
+	try
+	    execute a:command
+	finally
+	    execute l:currentWinNr . 'wincmd w'
+	endtry
+    endif
+endfunction
+function! ingobuffer#CallInVisibleBuffer( bufnr, Funcref, arguments )
+    return ingobuffer#ExecuteInVisibleBuffer(a:bufnr, 'call call(' . string(a:Funcref) . ',' . string(a:arguments) . ')')
+endfunction
+
+function! ingobuffer#ExecuteInTempBuffer( command, ...)
+"******************************************************************************
+"* PURPOSE:
+"   Invoke an Ex command in an empty temporary scratch buffer and return the
+"   contents of the buffer after the execution. 
+"
+"* ASSUMPTIONS / PRECONDITIONS:
+"   None. 
+"* EFFECTS / POSTCONDITIONS:
+"   None. 
+"* INPUTS:
+"   a:command	Ex command to be invoked. 
+"   a:isIgnoreOutput	Flag whether to skip capture of the scratch buffer
+"			contents and just execute a:command for its side
+"			effects. 
+"* RETURN VALUES: 
+"   Contents of the buffer. 
+"******************************************************************************
+    " It's hard to create a temp buffer in a safe way without side effects.
+    " Switching the buffer can change the window view, may have a noticable
+    " delay even with autocmds suppressed (maybe due to 'autochdir', or just a
+    " sync in syntax highlighting), or even destroy the buffer ('bufhidden').
+    " Splitting changes the window layout; there may not be room for another
+    " window or tab. And autocmds may do all sorts of uncontrolled changes. 
+    let l:originalWindowLayout = winrestcmd()
+	noautocmd silent keepalt leftabove 1new
+	let l:tempBufNr = bufnr('')
+    try
+	silent execute a:command
+	if ! a:0 || ! a:1
+	    return join(getline(1, line('$')), "\n")
+	endif
+    finally
+	noautocmd silent execute l:tempBufNr . 'bdelete!'
+	silent! execute l:originalWindowLayout
+    endtry
+endfunction
+function! ingobuffer#CallInTempBuffer( Funcref, arguments, ... )
+    return call('ingobuffer#ExecuteInTempBuffer', ['call call(' . string(a:Funcref) . ',' . string(a:arguments) . ')'] + a:000)
+endfunction
+
+" vim: set ts=8 sts=4 sw=4 noexpandtab ff=unix fdm=syntax :

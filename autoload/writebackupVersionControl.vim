@@ -5,14 +5,34 @@
 " DEPENDENCIES:
 "   - escapings.vim autoload script. 
 "   - ingobuffer.vim autoload script. 
+"   - ingodate.vim autoload script. 
 "   - External copy command "cp" (Unix), "copy" and "xcopy" (Windows). 
 "
-" Copyright: (C) 2007-2010 by Ingo Karkat
+" Copyright: (C) 2007-2012 Ingo Karkat
 "   The VIM LICENSE applies to this script; see ':help copyright'. 
 "
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS 
+"   2.30.019	13-Feb-2012	All autoload functions behind the various
+"				commands now also indicate their success via a
+"				boolean / numeric return value, so that
+"				integrations can delegate to these commands and
+"				find out whether the function succeeded.
+"				(Without doing convoluted stuff like redirecting
+"				and parsing the function's output.) 
+"   2.30.018	10-Feb-2012	ENH: On Windows, :WriteBackupOfSavedOriginal now
+"				updates the modification date (via a "copy"
+"				trick), and on Unix,
+"				:WriteBackupRestoreThisBackup /
+"				:WriteBackupRestoreFromPred now keep the
+"				backup's modification date. Correct the
+"				(opposite default behaviors) and select the
+"				desired behavior via a flag passed to s:Copy(). 
+"				Expose many internal functions for the
+"				writebackupAutomator plugin. 
+"   2.25.017	07-Oct-2011	Use ingodate#HumanReltime() for a more human
+"				output of elapsed time since last backup. 
 "   2.24.016	12-Feb-2010	BUG: :WriteBackupViewDiffWithPred can cause
 "				E121: Undefined variable: l:predecessor. Similar
 "				issue with a:filespec showing scratch buffer
@@ -128,7 +148,6 @@
 "				incompatible change that also requires the
 "				corresponding changes in here. 
 "				file creation
-
 let s:save_cpo = &cpo
 set cpo&vim
 
@@ -187,7 +206,7 @@ function! writebackupVersionControl#IsOriginalFile( filespec )
     return a:filespec !~? s:versionRegexp
 endfunction
 
-function! s:GetOriginalFilespec( filespec, isForDisplayingOnly )
+function! writebackupVersionControl#GetOriginalFilespec( filespec, isForDisplayingOnly )
 "*******************************************************************************
 "* PURPOSE:
 "   The passed a:filespec may be any ordinary file, an original file that has
@@ -252,7 +271,7 @@ function! s:GetOriginalFilespec( filespec, isForDisplayingOnly )
     endif
 endfunction
 
-function! s:GetVersion( filespec )
+function! writebackupVersionControl#GetVersion( filespec )
     if ! writebackupVersionControl#IsOriginalFile( a:filespec )
 	return strpart( a:filespec, len( a:filespec ) - s:versionLength + 1 )
     else
@@ -260,7 +279,7 @@ function! s:GetVersion( filespec )
     endif
 endfunction
 
-function! s:GetAdjustedBackupFilespec( filespec )
+function! writebackupVersionControl#GetAdjustedBackupFilespec( filespec )
 "*******************************************************************************
 "* PURPOSE:
 "   The adjustedBackupFilespec is an imaginary file in the backup directory. By
@@ -318,7 +337,7 @@ function! s:VerifyIsOriginalFileAndHasPredecessor( originalFilespec, notOriginal
 endfunction
 
 "------------------------------------------------------------------------------
-function! s:GetAllBackupsForFile( filespec )
+function! writebackupVersionControl#GetAllBackupsForFile( filespec )
 "*******************************************************************************
 "* PURPOSE:
 "   Retrieves a list of all filespecs of backup files for a:filespec. 
@@ -346,7 +365,7 @@ function! s:GetAllBackupsForFile( filespec )
 	" directory, to which we can append our file version glob. (The backup
 	" files may reside in a directory different from the original file;
 	" that's why we cannot simply use the original filespec for globbing.)  
-	let l:adjustedBackupFilespec = s:GetAdjustedBackupFilespec(a:filespec)
+	let l:adjustedBackupFilespec = writebackupVersionControl#GetAdjustedBackupFilespec(a:filespec)
 
 	" glob() will do the right thing and return an empty list if
 	" l:adjustedBackupFilespec doesn't yet exist, because no backup has yet been
@@ -384,7 +403,7 @@ function! s:GetIndexOfVersion( backupFiles, currentVersion )
 "*******************************************************************************
     let l:fileCnt = 0
     while l:fileCnt < len( a:backupFiles )
-	if s:GetVersion( a:backupFiles[ l:fileCnt ] ) == a:currentVersion 
+	if writebackupVersionControl#GetVersion( a:backupFiles[ l:fileCnt ] ) == a:currentVersion 
 	    return l:fileCnt
 	endif
 	let l:fileCnt += 1
@@ -414,9 +433,9 @@ function! s:GetRelativeBackup( filespec, relativeIndex )
 "   - Error message if no such version exists. 
 "   Either the first or the second list element is an empty string. 
 "*******************************************************************************
-    let l:backupFiles = s:GetAllBackupsForFile(a:filespec)
+    let l:backupFiles = writebackupVersionControl#GetAllBackupsForFile(a:filespec)
     let l:lastBackupIndex = len(l:backupFiles) - 1
-    let l:currentIndex = (writebackupVersionControl#IsOriginalFile(a:filespec) ? l:lastBackupIndex + 1 : s:GetIndexOfVersion( l:backupFiles, s:GetVersion(a:filespec) ))
+    let l:currentIndex = (writebackupVersionControl#IsOriginalFile(a:filespec) ? l:lastBackupIndex + 1 : s:GetIndexOfVersion( l:backupFiles, writebackupVersionControl#GetVersion(a:filespec) ))
 
     if l:currentIndex < 0
 	return ['', "Couldn't locate this backup: " . a:filespec]
@@ -448,12 +467,15 @@ function! s:EditFile( filespec, isBang, isReadonly )
 "		discarded. 
 "   a:isReadonly    Flag whether the file should be opened read-only. 
 "* RETURN VALUES: 
-"   None. 
+"   0 if an error occurred. 
+"   1 if successful. 
 "*******************************************************************************
     try
 	execute (a:isReadonly ? 'view' : 'edit') . (a:isBang ? '!' : '') s:FnameShortenAndEscape(a:filespec)
+	return 1
     catch /^Vim\%((\a\+)\)\=:E/
 	call s:VimExceptionMsg(v:exception)
+	return 0
     endtry
 endfunction
 function! writebackupVersionControl#WriteBackupGoOriginal( filespec, isBang )
@@ -470,22 +492,26 @@ function! writebackupVersionControl#WriteBackupGoOriginal( filespec, isBang )
 "   a:isBang	Flag whether any changes to the current buffer should be
 "		discarded. 
 "* RETURN VALUES: 
-"   None. 
+"   0 if an error occurred. 
+"   1 if successful. 
+"   2 if this is the original file. 
 "*******************************************************************************
     try
 	if writebackupVersionControl#IsOriginalFile( a:filespec )
 	    echomsg 'This is the original file.'
-	    return
+	    return 2
 	endif
 
-	let l:originalFilespec = s:GetOriginalFilespec( a:filespec, 0 )
+	let l:originalFilespec = writebackupVersionControl#GetOriginalFilespec( a:filespec, 0 )
 	if empty( l:originalFilespec )
 	    call s:ErrorMsg('Unable to determine the location of the original file.')
+	    return 0
 	else
-	    call s:EditFile(l:originalFilespec, a:isBang, 0)
+	    return s:EditFile(l:originalFilespec, a:isBang, 0)
 	endif
     catch /^WriteBackup\%(VersionControl\)\?:/
 	call s:ExceptionMsg(v:exception)
+	return 0
     endtry
 endfunction
 function! writebackupVersionControl#WriteBackupGoBackup( filespec, isBang, relativeIndex )
@@ -503,17 +529,20 @@ function! writebackupVersionControl#WriteBackupGoBackup( filespec, isBang, relat
 "		discarded. 
 "   a:relativeIndex 
 "* RETURN VALUES: 
-"   None. 
+"   0 if an error occurred. 
+"   1 if successful. 
 "*******************************************************************************
     try
 	let [l:backupFilespec, l:errorMessage] = s:GetRelativeBackup(a:filespec, a:relativeIndex)
 	if empty(l:errorMessage)
-	    call s:EditFile(l:backupFilespec, a:isBang, 1)
+	    return s:EditFile(l:backupFilespec, a:isBang, 1)
 	else
 	    call s:ErrorMsg(l:errorMessage)
+	    return 0
 	endif
     catch /^WriteBackup\%(VersionControl\)\?:/
 	call s:ExceptionMsg(v:exception)
+	return 0
     endtry
 endfunction
 
@@ -531,7 +560,8 @@ function! writebackupVersionControl#DiffWithPred( filespec, count )
 "   a:filespec	Backup or original file.
 "   a:count	Number of predecessors to go back. 
 "* RETURN VALUES: 
-"   None. 
+"   0 if an error occurred. 
+"   1 if successful. 
 "*******************************************************************************
     try
 	let [l:predecessor, l:errorMessage] = s:GetRelativeBackup( a:filespec, -1 * a:count )
@@ -560,12 +590,15 @@ function! writebackupVersionControl#DiffWithPred( filespec, count )
 
 	    " Return to original window. 
 	    wincmd p
+
+	    return 1
 	endif
     catch /^Vim\%((\a\+)\)\=:E/
 	call s:VimExceptionMsg(v:exception)
     catch /^WriteBackup\%(VersionControl\)\?:/
 	call s:ExceptionMsg(v:exception)
     endtry
+    return 0
 endfunction
 function! s:GetDiffOptions( diffOptions )
     let l:vimDiffOptions = split(&diffopt, ',')
@@ -582,10 +615,10 @@ function! s:NoDifferencesMessage( filespec, predecessor )
     return printf("No differences reported between %s and backup '%s' of '%s'.",
     \	(writebackupVersionControl#IsOriginalFile(a:filespec) ?
     \	    'the current ' . l:savedMsg . 'version' :
-    \	    l:savedMsg . "backup '" . s:GetVersion(a:filespec) . "'"
+    \	    l:savedMsg . "backup '" . writebackupVersionControl#GetVersion(a:filespec) . "'"
     \	),
-    \	s:GetVersion(a:predecessor),
-    \	s:GetOriginalFilespec(a:filespec, 1)
+    \	writebackupVersionControl#GetVersion(a:predecessor),
+    \	writebackupVersionControl#GetOriginalFilespec(a:filespec, 1)
     \)
 endfunction
 function! writebackupVersionControl#ViewDiffWithPred( filespec, count, diffOptions )
@@ -605,7 +638,9 @@ function! writebackupVersionControl#ViewDiffWithPred( filespec, count, diffOptio
 "   a:count	Number of predecessors to go back, 0 if no count was given. 
 "   a:diffOptions   Optional command-line arguments passed to the diff command. 
 "* RETURN VALUES: 
-"   None. 
+"   0 if an error occurred. 
+"   1 if successful. 
+"   2 if no differences were detected. 
 "*******************************************************************************
     try
 	if empty(g:WriteBackup_DiffShellCommand)
@@ -624,7 +659,7 @@ function! writebackupVersionControl#ViewDiffWithPred( filespec, count, diffOptio
 		let [l:predecessor, l:errorMessage] = s:GetRelativeBackup(l:newFile, -1 * a:count)
 		if ! empty(l:errorMessage)
 		    call s:ErrorMsg(l:errorMessage)
-		    return
+		    return 0
 		endif
 		let l:oldFile = fnamemodify(l:predecessor, ':.')
 	    else
@@ -639,7 +674,7 @@ function! writebackupVersionControl#ViewDiffWithPred( filespec, count, diffOptio
 	    let [l:predecessor, l:errorMessage] = s:GetRelativeBackup(a:filespec, -1 * (a:count ? a:count : 1))
 	    if ! empty(l:errorMessage)
 		call s:ErrorMsg(l:errorMessage)
-		return
+		return 0
 	    endif
 
 	    " Base the diff working directory on the current window's CWD. 
@@ -651,10 +686,11 @@ function! writebackupVersionControl#ViewDiffWithPred( filespec, count, diffOptio
 	    " with an appended '.diff' extension. To that, also append
 	    " ' [Scratch]', to signal that this buffer doesn't persist.  
 	    " Note: Because we only need the filename, not the filespec, we use
-	    " s:GetAdjustedBackupFilespec(), not s:GetOriginalFilespec(); the
-	    " latter one may fail when backups aren't created in the same
-	    " directory as the original file. 
-	    let l:scratchFilename = fnamemodify(s:GetAdjustedBackupFilespec(a:filespec), ':t') . '.diff [Scratch]'
+	    " writebackupVersionControl#GetAdjustedBackupFilespec(), not
+	    " writebackupVersionControl#GetOriginalFilespec(); the latter one
+	    " may fail when backups aren't created in the same directory as the
+	    " original file. 
+	    let l:scratchFilename = fnamemodify(writebackupVersionControl#GetAdjustedBackupFilespec(a:filespec), ':t') . '.diff [Scratch]'
 
 	    let l:oldFile = fnamemodify(l:predecessor, ':.')
 	    let l:newFile = fnamemodify(a:filespec, ':.')
@@ -678,7 +714,7 @@ function! writebackupVersionControl#ViewDiffWithPred( filespec, count, diffOptio
 	\	'silent 1read !' . l:diffCmd,
 	\	g:WriteBackup_ScratchBufferCommandModifiers . ' new'
 	\)
-	    return
+	    return 0
 	endif
 
 	if v:shell_error < 0 || v:shell_error > 1
@@ -709,7 +745,7 @@ function! writebackupVersionControl#ViewDiffWithPred( filespec, count, diffOptio
 	    " Hit-Enter prompt. 
 	    if &cmdheight > 1 | echo l:diffCmd | endif
 	    call s:WarningMsg(s:NoDifferencesMessage(l:newFile, l:oldFile))
-	    return
+	    return 2
 	elseif v:shell_error == 0
 	    " The diff buffer is not empty, but the diff command reported no
 	    " differences. (Probably, a unusual diff format like
@@ -758,11 +794,14 @@ function! writebackupVersionControl#ViewDiffWithPred( filespec, count, diffOptio
 	if ! empty(l:save_cursor)
 	    call setpos('.', l:save_cursor)
 	endif
+
+	return (v:shell_error == 0)
     catch /^Vim\%((\a\+)\)\=:E/
 	call s:VimExceptionMsg(v:exception)
     catch /^WriteBackup\%(VersionControl\)\?:/
 	call s:ExceptionMsg(v:exception)
     endtry
+    return 0
 endfunction
 
 function! s:EchoElapsedTimeSinceVersion( backupFilespec )
@@ -781,29 +820,9 @@ function! s:EchoElapsedTimeSinceVersion( backupFilespec )
 "   None. 
 "*******************************************************************************
     let l:timeElapsed = localtime() - getftime( a:backupFilespec )
-    let l:isBackupInFuture = 0
-    if l:timeElapsed < 0
-	let l:timeElapsed = -1 * l:timeElapsed
-	let l:isBackupInFuture = 1
-    endif
+    let l:isBackupInFuture = (l:timeElapsed < 0)
 
-    let l:secondsElapsed = l:timeElapsed % 60
-    let l:minutesElapsed = (l:timeElapsed / 60) % 60
-    let l:hoursElapsed = (l:timeElapsed / 3600) % 24
-    let l:daysElapsed = (l:timeElapsed / (3600 * 24))
-
-    let l:message = printf(
-    \	(l:isBackupInFuture ?
-    \	    'The last backup has a modification date %s%02d:%02d:%02d in the future?!' :
-    \	    'The last backup was done %s%02d:%02d:%02d ago.'
-    \	),
-    \	(l:daysElapsed > 0 ? l:daysElapsed . ' days, ' : ''),
-    \	l:hoursElapsed,
-    \	l:minutesElapsed,
-    \	l:secondsElapsed
-    \)
-
-    echomsg l:message
+    echomsg 'The last backup was done ' . ingodate#HumanReltime(l:timeElapsed) . (l:isBackupInFuture ? '?!' : '.')
 endfunction
 function! s:GetBackupDir( originalFilespec )
 "*******************************************************************************
@@ -852,16 +871,17 @@ function! writebackupVersionControl#ListVersions( filespec )
 "* INPUTS:
 "   a:filespec	Backup or original file.
 "* RETURN VALUES: 
-"   None. 
+"   0 if an error occurred. 
+"   1 if successful. 
 "*******************************************************************************
     try
-	let l:originalFilespec = s:GetOriginalFilespec( a:filespec, 1 )
-	let l:currentVersion = s:GetVersion( a:filespec )
+	let l:originalFilespec = writebackupVersionControl#GetOriginalFilespec( a:filespec, 1 )
+	let l:currentVersion = writebackupVersionControl#GetVersion( a:filespec )
 	let l:backupDirspec = s:GetBackupDir(l:originalFilespec)
-	let l:backupFiles = s:GetAllBackupsForFile(a:filespec)
+	let l:backupFiles = writebackupVersionControl#GetAllBackupsForFile(a:filespec)
 	if empty( l:backupFiles )
 	    echomsg "No backups exist for this file."
-	    return
+	    return 0
 	endif
 
 	let l:versionMessageHeader = "These backups exist for file '" . l:originalFilespec . "'" . (l:backupDirspec =~# '^\.\?$' ? '' : ' in ' . l:backupDirspec)
@@ -872,7 +892,7 @@ function! writebackupVersionControl#ListVersions( filespec )
 	let l:backupVersion = ''
 	for l:backupFile in l:backupFiles
 	    let l:previousVersion = l:backupVersion
-	    let l:backupVersion = s:GetVersion( l:backupFile )
+	    let l:backupVersion = writebackupVersionControl#GetVersion( l:backupFile )
 	    if strpart( l:backupVersion, 0, len(l:backupVersion) - 1 ) == strpart( l:previousVersion, 0, len(l:previousVersion) - 1 )
 		let l:versionMessageAddition = strpart( l:backupVersion, len(l:backupVersion) - 1 )
 		if l:backupVersion == l:currentVersion
@@ -893,8 +913,10 @@ function! writebackupVersionControl#ListVersions( filespec )
 	    let l:lastBackupFile = l:backupFiles[-1]
 	    call s:EchoElapsedTimeSinceVersion( l:lastBackupFile )
 	endif
+	return 1
     catch /^WriteBackup\%(VersionControl\)\?:/
 	call s:ExceptionMsg(v:exception)
+	return 0
     endtry
 endfunction
 
@@ -970,7 +992,7 @@ function! writebackupVersionControl#IsIdenticalWithPredecessor( filespec )
     endif
 
     if s:AreIdentical(l:predecessor, a:filespec)
-	return s:GetVersion(l:predecessor)
+	return writebackupVersionControl#GetVersion(l:predecessor)
     else
 	return ''
     endif
@@ -989,12 +1011,14 @@ function! writebackupVersionControl#IsBackedUp( originalFilespec )
 "   a:originalFilespec	Backup or original file (but backup file results in
 "			error message). 
 "* RETURN VALUES: 
-"   None. 
+"   -1 if an error occurred. 
+"   0 if the file is not backed up. 
+"   1 if the file is backed up. 
 "*******************************************************************************
     try
 	let l:predecessor = s:VerifyIsOriginalFileAndHasPredecessor( a:originalFilespec, 'You can only check the backup status of the original file, not of backups!', 1 )
 	if empty( l:predecessor )
-	    return
+	    return 0
 	endif
 
 	" As we compare the predecessor with the saved original file, not the actual
@@ -1004,20 +1028,23 @@ function! writebackupVersionControl#IsBackedUp( originalFilespec )
 	let l:savedMsg = (&l:modified ? 'saved ' : '') 
 
 	if s:AreIdentical(l:predecessor, a:originalFilespec)
-	    echomsg printf("The current %sversion of '%s' is identical with the latest backup '%s'.", l:savedMsg, a:originalFilespec, s:GetVersion(l:predecessor))
+	    echomsg printf("The current %sversion of '%s' is identical with the latest backup '%s'.", l:savedMsg, a:originalFilespec, writebackupVersionControl#GetVersion(l:predecessor))
+	    return 1
 	else
-	    call s:WarningMsg(printf("The current %sversion of '%s' is different from the latest backup '%s'.", l:savedMsg, a:originalFilespec, s:GetVersion(l:predecessor)))
+	    call s:WarningMsg(printf("The current %sversion of '%s' is different from the latest backup '%s'.", l:savedMsg, a:originalFilespec, writebackupVersionControl#GetVersion(l:predecessor)))
+	    return 0
 	endif
     catch /^WriteBackup\%(VersionControl\)\?:/
 	call s:ExceptionMsg(v:exception)
+	return -1
     endtry
 endfunction
 
-function! s:Copy( source, target, isForced )
+function! s:Copy( source, target, isForced, isKeepModificationDate )
 "*******************************************************************************
 "* PURPOSE:
 "   Copies a:source to a:target. If a:target exists, it is overwritten (unless
-"   is is readonly, then the copy command will fail, unless a:isForced). 
+"   it is readonly, then the copy command will fail, unless a:isForced). 
 "* ASSUMPTIONS / PRECONDITIONS:
 "   None. 
 "* EFFECTS / POSTCONDITIONS:
@@ -1026,6 +1053,9 @@ function! s:Copy( source, target, isForced )
 "   a:source filespec
 "   a:target filespec
 "   a:isForced	Flag whether readonly targets should be overwritten. 
+"   a:isKeepModificationDate	Flag whether the a:target should keep the
+"				modification date from a:source (or use the
+"				current date). 
 "* RETURN VALUES: 
 "   None. 
 "   Throws 'WriteBackupVersionControl: Unsupported operating system type.'
@@ -1037,16 +1067,33 @@ function! s:Copy( source, target, isForced )
     let l:targetFilespec = fnamemodify( a:target, ':p' )
 
     if has('win32') || has('win64')
-	" On Windows, 'copy' cannot overwrite a readonly target; only 'xcopy'
+	" On Windows, "copy" cannot overwrite a readonly target; only "xcopy"
 	" can (with the /R option). 
-	let l:copyShellCmd = (s:IsFileReadonly(a:target) ? 'xcopy /Q /R /Y' : 'copy /Y')
+	"
+	" Both "copy" and "xcopy" keep the original modification date. 
+	" We can change that with a trick: Appending the null file to it in
+	" binary mode updates the modification date, and similarly "copy /B /Y
+	" file +,," emulates the "touch" command. 
+	if a:isKeepModificationDate
+	    let l:copyShellCmd = (s:IsFileReadonly(a:target) ? 'xcopy /Q /R /Y %s %s' : 'copy /Y %s %s')
+	else
+	    let l:copyShellCmd = (s:IsFileReadonly(a:target) ?
+	    \   'xcopy /Q /R /Y %s %s && copy /B /Y ' . escapings#shellescape(l:targetFilespec) . ' +,,' :
+	    \   'copy /B /Y %s +NUL %s'
+	    \)
+	endif
     elseif has('unix')
-	let l:copyShellCmd = (s:IsFileReadonly(a:target) ? 'cp -f' : 'cp') . ' --'
+	" "cp" needs to be instructed to keep the source's modification date via
+	" an option. 
+	let l:preserveArg = (a:isKeepModificationDate ? ' --preserve=timestamps' : '')
+	let l:copyShellCmd = (s:IsFileReadonly(a:target) ?
+	\   'cp -f' . l:preserveArg . ' -- %s %s' :
+	\   'cp'    . l:preserveArg . ' -- %s %s'
+	\)
     else
 	throw 'WriteBackupVersionControl: Unsupported operating system type.'
     endif
-    let l:copyCmd = printf('%s %s %s',
-    \	l:copyShellCmd,
+    let l:copyCmd = printf(l:copyShellCmd,
     \	escapings#shellescape(l:sourceFilespec),
     \	escapings#shellescape(l:targetFilespec)
     \)
@@ -1105,7 +1152,7 @@ function! s:Restore( source, target, isForced, confirmationMessage )
     " Thus, we invoke an external command to create a perfect copy.
     " Unfortunately, this introduces platform-specific code. 
     try
-	call s:Copy(a:source, a:target, a:isForced)
+	call s:Copy(a:source, a:target, a:isForced, 1)
     catch
 	throw 'WriteBackupVersionControl: Failed to restore file: ' . v:exception
     endtry
@@ -1127,22 +1174,25 @@ function! writebackupVersionControl#RestoreFromPred( originalFilespec, isForced,
 "		overwrite readonly original file. 
 "   a:count	Number of predecessors to go back. 
 "* RETURN VALUES: 
-"   None. 
+"   0 if an error occurred or the user declined. 
+"   1 if successful. 
 "*******************************************************************************
     try
 	let l:predecessor = s:VerifyIsOriginalFileAndHasPredecessor( a:originalFilespec, 'You can only restore the original file, not a backup!', a:count )
 	if empty(l:predecessor)
-	    return
+	    return 0
 	endif
 
-	if s:Restore( l:predecessor, a:originalFilespec, a:isForced, printf("Really override this file with backup '%s'?", s:GetVersion(l:predecessor) ))
+	if s:Restore( l:predecessor, a:originalFilespec, a:isForced, printf("Really override this file with backup '%s'?", writebackupVersionControl#GetVersion(l:predecessor) ))
 	    edit!
+	    return 1
 	endif
     catch /^Vim\%((\a\+)\)\=:E/
 	call s:VimExceptionMsg(v:exception)
     catch /^WriteBackup\%(VersionControl\)\?:/
 	call s:ExceptionMsg(v:exception)
     endtry
+    return 0
 endfunction
 function! writebackupVersionControl#RestoreThisBackup( filespec, isForced )
 "*******************************************************************************
@@ -1158,30 +1208,33 @@ function! writebackupVersionControl#RestoreThisBackup( filespec, isForced )
 "   a:isForced	Flag whether restore should proceed without confirmation and
 "		overwrite readonly original file. 
 "* RETURN VALUES: 
-"   None. 
+"   0 if an error occurred or the user declined. 
+"   1 if successful. 
 "*******************************************************************************
     try
-	let l:currentVersion = s:GetVersion(a:filespec)
+	let l:currentVersion = writebackupVersionControl#GetVersion(a:filespec)
 	if empty(l:currentVersion)
 	    call s:ErrorMsg('You can only restore backup files!')
-	    return
+	    return 0
 	endif
 
-	let l:originalFilespec = s:GetOriginalFilespec(a:filespec, 0)
+	let l:originalFilespec = writebackupVersionControl#GetOriginalFilespec(a:filespec, 0)
 	if empty( l:originalFilespec )
 	    " TODO: 'Unable to determine the location of the original file; open it in another buffer.'
 	    call s:ErrorMsg('Unable to determine the location of the original file.')
-	    return
+	    return 0
 	endif
 
 	if s:Restore( a:filespec, l:originalFilespec, a:isForced, printf("Really override '%s' with this backup '%s'?", l:originalFilespec, l:currentVersion) )
 	    execute 'edit! ' . s:FnameShortenAndEscape(l:originalFilespec)
+	    return 1
 	endif
     catch /^Vim\%((\a\+)\)\=:E/
 	call s:VimExceptionMsg(v:exception)
     catch /^WriteBackup\%(VersionControl\)\?:/
 	call s:ExceptionMsg(v:exception)
     endtry
+    return 0
 endfunction
 
 function! writebackupVersionControl#WriteBackupOfSavedOriginal( originalFilespec, isForced )
@@ -1200,10 +1253,9 @@ function! writebackupVersionControl#WriteBackupOfSavedOriginal( originalFilespec
 "		if contents are identical or when no more backup versions (for
 "		this day) are available. 
 "* RETURN VALUES: 
-"   Throws 'WriteBackupVersionControl: You can only backup the latest file version, not a backup file itself!'
-"   Throws 'WriteBackupVersionControl: This file is already backed up as '<version>''. 
-"   Throws 'WriteBackup:' or any exception resulting from query for backup dir. 
-"   Throws 'WriteBackupVersionControl: Encountered problems...' 
+"   -1 if an error occurred. 
+"   0 if the file is already backed up. 
+"   1 if successful. 
 "*******************************************************************************
     try
 	if ! writebackupVersionControl#IsOriginalFile(a:originalFilespec)
@@ -1218,12 +1270,18 @@ function! writebackupVersionControl#WriteBackupOfSavedOriginal( originalFilespec
 	endif
 
 	let l:backupFilename = writebackup#GetBackupFilename(a:originalFilespec, a:isForced)
-	call s:Copy(a:originalFilespec, l:backupFilename, a:isForced)
+	call s:Copy(a:originalFilespec, l:backupFilename, a:isForced, 0)
 	echomsg '"' . l:backupFilename . '" written'
+	return 1
+    catch /^WriteBackupVersionControl: This file is already backed up/
+	call s:ExceptionMsg(v:exception)
+	return 0
     catch /^WriteBackup\%(VersionControl\)\?:/
 	call s:ExceptionMsg(v:exception)
+	return -1
     catch
 	call s:ErrorMsg('Failed to backup file: ' . v:exception)
+	return -1
     endtry
 endfunction
 
@@ -1253,11 +1311,11 @@ function! writebackupVersionControl#DeleteBackup( backupFilespec, isForced )
     " The delete() function also deletes readonly files without complaining, so
     " we need to explicitly check for readonly files to avoid that. 
     if ! a:isForced && s:IsFileReadonly(a:backupFilespec)
-	throw printf("WriteBackupVersionControl: Cannot delete readonly backup '%s' (add ! to override)", s:GetVersion(a:backupFilespec))
+	throw printf("WriteBackupVersionControl: Cannot delete readonly backup '%s' (add ! to override)", writebackupVersionControl#GetVersion(a:backupFilespec))
     endif
 
     if delete(a:backupFilespec) != 0
-	throw printf("WriteBackupVersionControl: Failed to delete backup '%s'", s:GetVersion(a:backupFilespec))
+	throw printf("WriteBackupVersionControl: Failed to delete backup '%s'", writebackupVersionControl#GetVersion(a:backupFilespec))
     endif
 endfunction
 function! writebackupVersionControl#DeleteBackupLastBackup( filespec, isForced )
@@ -1274,36 +1332,38 @@ function! writebackupVersionControl#DeleteBackupLastBackup( filespec, isForced )
 "   a:isForced	Flag whether delete without confirmation and whether readonly
 "		backups should also be deleted. 
 "* RETURN VALUES: 
-"   None. 
+"   0 if an error occurred or the user declined. 
+"   1 if successful. 
 "*******************************************************************************
     try
-	let l:backupFiles = s:GetAllBackupsForFile(a:filespec)
+	let l:backupFiles = writebackupVersionControl#GetAllBackupsForFile(a:filespec)
 	if len(l:backupFiles) == 0
 	    call s:ErrorMsg('No backups exist for this file.')
-	    return
+	    return 0
 	endif
 	let l:lastBackupFile = l:backupFiles[-1]
 
 	if ! a:isForced
-	    let l:response = confirm( printf("Really delete backup '%s'?", s:GetVersion(l:lastBackupFile)), "&No\n&Yes", 1, 'Question' )
+	    let l:response = confirm( printf("Really delete backup '%s'?", writebackupVersionControl#GetVersion(l:lastBackupFile)), "&No\n&Yes", 1, 'Question' )
 	    if l:response != 2
 		echomsg 'Delete canceled.'
-		return
+		return 0
 	    endif
 	endif
 
 	call writebackupVersionControl#DeleteBackup(l:lastBackupFile, a:isForced)
 
 	echomsg printf("Deleted backup '%s'; %s", 
-	\   s:GetVersion(l:lastBackupFile),
-	\   (len(l:backupFiles) == 1 ? 'no backups exist for this file any more.' : "last backup now is '" . s:GetVersion(l:backupFiles[-2]) . "'")
+	\   writebackupVersionControl#GetVersion(l:lastBackupFile),
+	\   (len(l:backupFiles) == 1 ? 'no backups exist for this file any more.' : "last backup now is '" . writebackupVersionControl#GetVersion(l:backupFiles[-2]) . "'")
 	\)
+	return 1
     catch /^WriteBackup\%(VersionControl\)\?:/
 	call s:ExceptionMsg(v:exception)
     endtry
+    return 0
 endfunction
 
 let &cpo = s:save_cpo
 unlet s:save_cpo
-
-" vim: set sts=4 sw=4 noexpandtab ff=unix fdm=syntax :
+" vim: set ts=8 sts=4 sw=4 noexpandtab ff=unix fdm=syntax :

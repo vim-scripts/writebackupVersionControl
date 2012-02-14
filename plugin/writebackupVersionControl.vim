@@ -225,4 +225,4 @@ command! -bar -bang WriteBackupOfSavedOriginal	    	    call writebackupVersionC
 command! -bar -bang WriteBackupDeleteLastBackup	    	    call writebackupVersionControl#DeleteBackupLastBackup(expand('%'), <bang>0)
 
 unlet s:version
-" vim: set sts=4 sw=4 noexpandtab ff=unix fdm=syntax :
+" vim: set ts=8 sts=4 sw=4 noexpandtab ff=unix fdm=syntax :

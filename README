@@ -5,7 +5,7 @@ with the writebackup plugin, which have a date file extension in the format
 '.YYYYMMDD[a-z]'. 
 
 DESCRIPTION
-This script enhances the primitive file backup mechanism provided by
+This plugin enhances the primitive file backup mechanism provided by
 writebackup.vim with some functions of real revision control systems like
 CVS, RCS or Subversion - without additional software. 
 Via Vim commands, you can list and go to all backup versions that exist for
@@ -72,6 +72,19 @@ USAGE
 			:WriteBackupViewDiffWithPred in the diff scratch
 			buffer itself, or through the buffer-local [count]du
 			mapping. 
+
+:[count]WriteBackupDiffDaysChanges
+			Perform a diff of the current file (which may be the
+			original file or any backup) with today's (or
+			[count] - 1 days ago) first backup. 
+			The diff is done inside Vim, with a new :diffsplit
+			being opened. 
+
+:[count]WriteBackupViewDaysChanges [{diff-arguments}]
+			Show the differences of the current file (which may be
+			the original file or any backup) with today's (or
+			[count] -1 days ago) first backup. 
+			The diff output is opened in a split scratch buffer. 
 
 :[count]WriteBackupRestoreFromPred[!]
 			Overwrite the current file (which must be the
