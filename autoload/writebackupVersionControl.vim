@@ -14,6 +14,17 @@
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS 
+"   3.00.020	14-Feb-2012	Change return value of
+"				writebackupVersionControl#IsIdenticalWithPredecessor()
+"				from predecessor version to full filespec. 
+"   			    	ENH: New "redate" option for
+"				g:WriteBackup_AvoidIdenticalBackups that renames
+"				an identical backup from an earlier date to be
+"				the first backup of today. Adapted
+"				implementation of
+"				writebackupVersionControl#WriteBackupOfSavedOriginal()
+"				to match new behavior of writebackup.vim 3.00;
+"				this also uses its new functionality. 
 "   2.30.019	13-Feb-2012	All autoload functions behind the various
 "				commands now also indicate their success via a
 "				boolean / numeric return value, so that
@@ -981,7 +992,7 @@ function! writebackupVersionControl#IsIdenticalWithPredecessor( filespec )
 "* INPUTS:
 "   a:filespec	Backup or original file. 
 "* RETURN VALUES: 
-"   Backup version of the identical predecessor or empty string to indicate that
+"   Filespec of the identical predecessor or empty string to indicate that
 "   either no backup exists, or the predecessor is different. 
 "   Throws 'WriteBackupVersionControl: Encountered problems...' 
 "*******************************************************************************
@@ -992,7 +1003,7 @@ function! writebackupVersionControl#IsIdenticalWithPredecessor( filespec )
     endif
 
     if s:AreIdentical(l:predecessor, a:filespec)
-	return writebackupVersionControl#GetVersion(l:predecessor)
+	return l:predecessor
     else
 	return ''
     endif
@@ -1256,16 +1267,30 @@ function! writebackupVersionControl#WriteBackupOfSavedOriginal( originalFilespec
 "   -1 if an error occurred. 
 "   0 if the file is already backed up. 
 "   1 if successful. 
+"   2 if the file was already backed up, and the earlier backup was successfully
+"     redated. 
 "*******************************************************************************
     try
 	if ! writebackupVersionControl#IsOriginalFile(a:originalFilespec)
 	    throw 'WriteBackupVersionControl: You can only backup the latest file version, not a backup file itself!'
 	endif
 
-	if g:WriteBackup_AvoidIdenticalBackups && ! a:isForced
-	    let l:currentBackupVersion = writebackupVersionControl#IsIdenticalWithPredecessor(a:originalFilespec)
-	    if ! empty(l:currentBackupVersion)
-		throw printf("WriteBackupVersionControl: This file is already backed up as '%s'", l:currentBackupVersion)
+	if ! a:isForced && g:WriteBackup_AvoidIdenticalBackups !=# '0'
+	    let l:identicalPredecessorFilespec = writebackupVersionControl#IsIdenticalWithPredecessor(a:originalFilespec)
+	    if ! empty(l:identicalPredecessorFilespec)
+		if g:WriteBackup_AvoidIdenticalBackups ==# 'redate'
+		    let l:backupFilespec = writebackup#GetBackupFilename(a:originalFilespec, 0)
+		    if writebackup#ShouldRedateIdenticalBackup(l:backupFilespec)
+			" This would be today's first backup, but an earlier
+			" identical backup exists, so just rename that to
+			" represent today's first backup. 
+			call writebackup#Redate(l:identicalPredecessorFilespec, l:backupFilespec)
+			return 2
+		    endif
+		endif
+
+		let l:identicalPredecessorVersion = writebackupVersionControl#GetVersion(l:identicalPredecessorFilespec)
+		throw printf("WriteBackupVersionControl: This file is already backed up as '%s'", l:identicalPredecessorVersion)
 	    endif
 	endif
 

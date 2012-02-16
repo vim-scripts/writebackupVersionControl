@@ -11,12 +11,12 @@
 "   - External command "cmp", "diff" or equivalent for comparison. 
 "   - External command "diff" or equivalent for listing of differences. 
 "
-" Copyright: (C) 2007-2010 by Ingo Karkat
+" Copyright: (C) 2007-2012 Ingo Karkat
 "   The VIM LICENSE applies to this script; see ':help copyright'. 
 "
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
-let s:version = 224
+let s:version = 300
 " REVISION	DATE		REMARKS 
 "   2.23.033	26-Oct-2009	ENH: :WriteBackupRestoreFromPred now takes an
 "				optional [count] to restore an earlier
@@ -154,11 +154,11 @@ endif
 if ! exists('g:loaded_writebackup')
     runtime plugin/writebackup.vim
 endif
-if ! exists('g:loaded_writebackup') || g:loaded_writebackup < 200
+if ! exists('g:loaded_writebackup') || g:loaded_writebackup < 300
     echomsg 'writebackupVersionControl: You need a newer version of the writebackup.vim plugin.'
     finish
 endif
-if g:loaded_writebackup >= 300
+if g:loaded_writebackup >= 400
     echomsg 'writebackupVersionControl: You need a newer version of this plugin; writebackup.vim is too new.'
     finish
 endif
