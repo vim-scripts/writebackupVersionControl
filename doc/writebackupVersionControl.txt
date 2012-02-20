@@ -107,6 +107,20 @@ USAGE					     *WriteBackupVersionControl-usage*
 <			If you repeat with a [count], a new predecessor is
 			chosen for the updated diff; the newer file is kept. 
 
+						 *:WriteBackupDiffDaysChanges*
+:[count]WriteBackupDiffDaysChanges
+			Perform a diff of the current file (which may be the
+			original file or any backup) with today's (or
+			[count] - 1 days ago) first backup. 
+			The diff is done inside Vim, with a new |:diffsplit|
+			being opened. 
+						 *:WriteBackupViewDaysChanges*
+:[count]WriteBackupViewDaysChanges [{diff-arguments}]
+			Show the differences of the current file (which may be
+			the original file or any backup) with today's (or
+			[count] -1 days ago) first backup. 
+			The diff output is opened in a split scratch buffer. 
+
 						 *:WriteBackupRestoreFromPred*
 :[count]WriteBackupRestoreFromPred[!]
 			Overwrite the current file (which must be the
@@ -212,6 +226,9 @@ IDEAS									    *
 
 ==============================================================================
 HISTORY					   *WriteBackupVersionControl-history*
+
+3.10	20-Feb-2012
+ENH: Add :WriteBackupDiffDaysChanges and :WriteBackupViewDaysChanges. 
 
 3.00	16-Feb-2012
 ENH: New writebackup.vim default "redate" for

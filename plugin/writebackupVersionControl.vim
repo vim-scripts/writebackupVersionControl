@@ -18,6 +18,8 @@
 "
 let s:version = 300
 " REVISION	DATE		REMARKS 
+"   3.10.034	20-Feb-2012	ENH: Add :WriteBackupDiffDaysChanges and
+"				:WriteBackupViewDaysChanges. 
 "   2.23.033	26-Oct-2009	ENH: :WriteBackupRestoreFromPred now takes an
 "				optional [count] to restore an earlier
 "				predecessor. 
@@ -213,7 +215,9 @@ endif
 
 "- commands -------------------------------------------------------------------
 command! -bar -count=1 WriteBackupDiffWithPred		    call writebackupVersionControl#DiffWithPred(expand('%'), <count>)
+command! -bar -count=1 WriteBackupDiffDaysChanges	    call writebackupVersionControl#DiffDaysChanges(expand('%'), <count>)
 command! -nargs=? -count=0 WriteBackupViewDiffWithPred	    call writebackupVersionControl#ViewDiffWithPred(expand('%'), <count>, <q-args>)
+command! -nargs=? -count=0 WriteBackupViewDaysChanges	    call writebackupVersionControl#ViewDiffDaysChanges(expand('%'), <count>, <q-args>)
 command! -bar WriteBackupListVersions			    call writebackupVersionControl#ListVersions(expand('%'))
 command! -bar -bang -count=1 WriteBackupGoPrev	    	    call writebackupVersionControl#WriteBackupGoBackup(expand('%'), <bang>0, -1 * <count>)
 command! -bar -bang -count=1 WriteBackupGoNext	    	    call writebackupVersionControl#WriteBackupGoBackup(expand('%'), <bang>0, <count>)
